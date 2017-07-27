@@ -39,7 +39,7 @@ DEPENDENCIES = [
     'click',
 ]
 
-TEST_DEPENDENCIES = [
+TEST_DEPENDENCIES = [  # only for pytest-runner!
     'pytest',
 ]
 
@@ -48,11 +48,18 @@ SETUP_DEPENDENCIES = [
     'pytest-runner>=2.0,<3dev',
 ]
 
+EXTRA_DEPENDECIES = {
+    'dev': [
+        'tox',
+    ],
+}
+
 
 setup(
     **METADATA,
     setup_requires=SETUP_DEPENDENCIES,
     install_requires=DEPENDENCIES,
     tests_require=TEST_DEPENDENCIES,
+    extras_require=EXTRA_DEPENDECIES,
     packages=find_packages(exclude={'tests', 'docs'}),
 )
