@@ -4,11 +4,10 @@ verify_ssl = true
 
 [dev-packages]
 pytest = "*"
-tox = "*"
+
+[requires]
+python_version = "3.5"
 
 [packages]
 click = "*"
 attrs = ">=17"
-
-[requires]
-python_version = "3.5"

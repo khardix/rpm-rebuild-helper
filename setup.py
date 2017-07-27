@@ -49,9 +49,6 @@ SETUP_DEPENDENCIES = [
 ]
 
 EXTRA_DEPENDECIES = {
-    'dev': [
-        'tox',
-    ],
 }
 
 

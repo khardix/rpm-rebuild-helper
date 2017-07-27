@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "5890327a49ccdfc5a0572f8ed7db08326aa201073e6008461ad4e09f4baa874b"
+            "sha256": "2f8cfe6a5968c8d358511ea528af599c211052481ed6fb7384abdb7487a83dae"
         },
         "requires": {
             "python_version": "3.5"
@@ -22,9 +22,6 @@
         }
     },
     "develop": {
-        "pluggy": {
-            "version": "==0.4.0"
-        },
         "py": {
             "version": "==1.4.34"
         },
@@ -33,12 +30,6 @@
         },
         "setuptools": {
             "version": "==36.2.4"
-        },
-        "tox": {
-            "version": "==2.7.0"
-        },
-        "virtualenv": {
-            "version": "==15.1.0"
         }
     }
 }
