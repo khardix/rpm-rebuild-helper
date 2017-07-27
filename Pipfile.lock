@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "628c41155ec6022bdb06590821aa2f687f46bbc1aba18c1f9dac0e5003a4f77f"
+            "sha256": "2f8cfe6a5968c8d358511ea528af599c211052481ed6fb7384abdb7487a83dae"
         },
         "requires": {
             "python_version": "3.5"
@@ -14,6 +14,9 @@
         ]
     },
     "default": {
+        "attrs": {
+            "version": "==17.2.0"
+        },
         "click": {
             "version": "==6.7"
         }
@@ -26,7 +29,7 @@
             "version": "==3.1.3"
         },
         "setuptools": {
-            "version": "==36.2.3"
+            "version": "==36.2.4"
         }
     }
 }

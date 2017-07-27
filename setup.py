@@ -35,6 +35,7 @@ METADATA = {
 }
 
 DEPENDENCIES = [
+    'attrs>=17',
     'click',
 ]
 

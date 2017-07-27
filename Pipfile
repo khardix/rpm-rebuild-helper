@@ -10,3 +10,4 @@ pytest = "*"
 
 [packages]
 click = "*"
+attrs = '>=17'
