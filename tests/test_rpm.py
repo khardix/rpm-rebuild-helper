@@ -24,6 +24,27 @@ def metadata(request) -> rpm.Metadata:
     return rpm.Metadata(**request.param)
 
 
+def test_construction_from_file(minimal_srpm_path):
+    """Metadata can be read from open file."""
+
+    with minimal_srpm_path.open(mode='rb') as istream:
+        metadata = rpm.Metadata.from_file(istream)
+
+    assert metadata.name == 'test'
+    assert metadata.epoch == 0
+    assert metadata.arch == 'src'
+
+
+def test_construction_from_path(minimal_srpm_path):
+    """Metadata can be read for a file path."""
+
+    metadata = rpm.Metadata.from_path(minimal_srpm_path)
+
+    assert metadata.name == 'test'
+    assert metadata.epoch == 0
+    assert metadata.arch == 'src'
+
+
 def test_nvr_format(metadata):
     """Ensure NVR is formatted as expected"""
 

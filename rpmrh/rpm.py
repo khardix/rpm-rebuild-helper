@@ -2,7 +2,8 @@
 
 import operator
 from functools import partialmethod
-from typing import Callable, Tuple, TypeVar, Union
+from pathlib import Path
+from typing import BinaryIO, Callable, Tuple, TypeVar, Union
 
 import attr
 from attr.validators import instance_of, optional
@@ -30,6 +31,58 @@ class Metadata:
 
     epoch = attr.ib(validator=optional(instance_of(int)), default=0, convert=int)  # noqa: E501
     arch = attr.ib(validator=optional(instance_of(str)), default='src')
+
+    # Alternative constructors
+
+    @classmethod
+    def from_file(cls, file: BinaryIO) -> 'Metadata':
+        """Read metadata from an RPM file.
+
+        Keyword arguments:
+            file: The IO object to read the metadata from.
+                It has to provide a file descriptor – in-memory
+                files are unsupported.
+
+        Returns:
+            New instance of Metadata.
+        """
+
+        transaction = _rpm.TransactionSet()
+        # Ignore missing signatures warning
+        transaction.setVSFlags(_rpm._RPMVSF_NOSIGNATURES)
+
+        header = transaction.hdrFromFdno(file.fileno())
+
+        # Decode the attributes
+        attributes = {
+            'name': header[_rpm.RPMTAG_NAME].decode('utf-8'),
+            'version': header[_rpm.RPMTAG_VERSION].decode('utf-8'),
+            'release': header[_rpm.RPMTAG_RELEASE].decode('utf-8'),
+            'epoch': header[_rpm.RPMTAG_EPOCHNUM],
+        }
+
+        # For source RPMs the architecture reported is a binary one
+        # for some reason
+        if header[_rpm.RPMTAG_SOURCEPACKAGE]:
+            attributes['arch'] = 'src'
+        else:
+            attributes['arch'] = header[_rpm.RPMTAG_ARCH].decode('utf-8')
+
+        return cls(**attributes)
+
+    @classmethod
+    def from_path(cls, path: Path) -> 'Metadata':
+        """Read metadata for specified RPM file path.
+
+        Keyword arguments:
+            path: The path to the file to read metadata for.
+
+        Returns:
+            New instance of Metadata.
+        """
+
+        with path.open(mode='rb') as file:
+            return cls.from_file(file)
 
     # Derived attributes
 
