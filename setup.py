@@ -37,10 +37,14 @@ METADATA = {
 DEPENDENCIES = [
     'attrs>=17',
     'click',
+    'PyTrie',
+    'requests',
 ]
 
 TEST_DEPENDENCIES = [  # only for pytest-runner!
     'pytest',
+    'betamax',
+    'pyfakefs',
 ]
 
 SETUP_DEPENDENCIES = [

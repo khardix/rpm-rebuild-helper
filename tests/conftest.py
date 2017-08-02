@@ -5,7 +5,16 @@ from pathlib import Path
 from subprocess import run
 from textwrap import dedent
 
+import betamax
 import pytest
+
+
+# Betamax configuration
+CASSETTE_DIR = Path('tests/cassettes/')
+CASSETTE_DIR.mkdir(exist_ok=True)
+
+with betamax.Betamax.configure() as config:
+    config.cassette_library_dir = str(CASSETTE_DIR)
 
 
 # Fixtures

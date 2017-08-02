@@ -2,12 +2,16 @@
 url = "https://pypi.python.org/simple"
 verify_ssl = true
 
-[dev-packages]
-pytest = "*"
-
-[requires]
-python_version = "3.5"
-
 [packages]
 click = "*"
 attrs = ">=17"
+PyTrie = "*"
+requests = "*"
+
+[dev-packages]
+pytest = "*"
+pyfakefs = "*"
+betamax = "*"
+
+[requires]
+python_version = "3.5"
