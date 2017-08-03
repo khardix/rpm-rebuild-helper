@@ -1,5 +1,6 @@
 """py.test configuration and shared fixtures"""
 
+import os
 from itertools import chain
 from pathlib import Path
 from subprocess import run
@@ -15,6 +16,10 @@ CASSETTE_DIR.mkdir(exist_ok=True)
 
 with betamax.Betamax.configure() as config:
     config.cassette_library_dir = str(CASSETTE_DIR)
+    config.default_cassette_options.update({
+        'record_mode': 'none' if os.environ.get('TRAVIS_BUILD') else 'once',
+        'preserve_exact_body_bytes': True,
+    })
 
 
 # Fixtures

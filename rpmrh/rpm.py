@@ -29,7 +29,12 @@ class Metadata:
     version = attr.ib(validator=instance_of(str))
     release = attr.ib(validator=instance_of(str))
 
-    epoch = attr.ib(validator=optional(instance_of(int)), default=0, convert=int)  # noqa: E501
+    epoch = attr.ib(
+        validator=optional(instance_of(int)),
+        default=0,
+        # special case for None: treat that as 0
+        convert=lambda val: 0 if val is None else int(val),
+    )  # noqa: E501
     arch = attr.ib(validator=optional(instance_of(str)), default='src')
 
     # Alternative constructors

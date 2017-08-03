@@ -2,9 +2,10 @@
 
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import ClassVar, Set, Iterator
+from typing import ClassVar, Set, Iterator, Optional
 
 import attr
+import requests
 from attr.validators import instance_of
 from pytrie import Trie, StringTrie
 
@@ -55,12 +56,19 @@ class Repository(metaclass=ABCMeta):
         """
 
     @abstractmethod
-    def download(self, package: rpm.Metadata, target_dir: Path) -> Path:
+    def download(
+        self,
+        package: rpm.Metadata,
+        target_dir: Path,
+        *,
+        session: Optional[requests.Session] = None
+    ) -> Path:
         """Download a single package from the Repository.
 
         Keyword arguments:
             package: Metadata identifying the package to download.
             target_dir: Directory to save the package into.
+            session: requests session to use for downloading.
 
         Returns:
             Path to the downloaded package.
