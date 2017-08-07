@@ -1,0 +1,9 @@
+# The list of required libraries installed as rpm
+# Should be replaced with proper SPEC file
+
+# Requires
+python3-koji
+python3-dnf
+
+# BuildRequires
+python3-createrepo_c
