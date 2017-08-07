@@ -1,13 +1,17 @@
 """py.test configuration and shared fixtures"""
 
 import os
-from itertools import chain
+from contextlib import ExitStack, closing
+from itertools import chain, repeat
+from operator import itemgetter
 from pathlib import Path
 from subprocess import run
 from textwrap import dedent
 
 import betamax
 import pytest
+
+import createrepo_c as crc
 
 
 # Betamax configuration
@@ -82,3 +86,84 @@ def minimal_srpm_path(minimal_spec_path):
     run(['rpmbuild'] + list(defines) + ['-bs', str(minimal_spec_path)])
 
     return next(top_dir.glob('test-*.src.rpm'))
+
+
+@pytest.fixture(scope='module')
+def minimal_repository_url(minimal_srpm_path):
+    """Provide a minimal complete YUM/DNF repository."""
+
+    # Adapted from https://github.com/rpm-software-management/createrepo_c/blob/master/examples/python/simple_createrepo.py  # noqa: E501
+
+    root_dir = minimal_srpm_path.parent
+    repodata = root_dir / 'repodata'
+    repodata.mkdir(exist_ok=True)
+
+    # Order matters!
+    db_setup = [  # DB file name -> DB initializer
+        ('primary.sqlite', crc.PrimarySqlite),
+        ('filelists.sqlite', crc.FilelistsSqlite),
+        ('other.sqlite', crc.OtherSqlite),
+    ]
+
+    xml_setup = [  # XML file name -> XML initializer
+        ('primary.xml.gz', crc.PrimaryXmlFile),
+        ('filelists.xml.gz', crc.FilelistsXmlFile),
+        ('other.xml.gz', crc.OtherXmlFile),
+    ]
+
+    with ExitStack() as repo_setup:
+        # Open sqlite databases
+        db_stack = repo_setup.enter_context(ExitStack())
+        databases = [
+            db_stack.enter_context(closing(init(str(repodata / name))))
+            for name, init in db_setup
+        ]
+
+        # Open XML files
+        xml_stack = repo_setup.enter_context(ExitStack())
+        xml_files = [
+            xml_stack.enter_context(closing(init(str(repodata / name))))
+            for name, init in xml_setup
+        ]
+
+        # Get all rpm in the repo directory
+        pkg_list = list(root_dir.glob('*.rpm'))
+
+        # Process the packages
+        for xfile in xml_files:
+            xfile.set_num_of_pkgs(len(pkg_list))
+
+        for pkg_path in pkg_list:
+            pkg = crc.package_from_rpm(str(pkg_path))
+            pkg.location_href = str(pkg_path.parent)
+
+            for db in xml_files + databases:
+                db.add_pkg(pkg)
+
+        xml_stack.close()
+
+        # Create metadata file
+        record_keys = [
+            'primary', 'filelists', 'other',
+            'primary_db', 'filelists_db', 'other_db',
+        ]
+        record_paths = map(itemgetter(0), xml_setup + db_setup)
+        record_dbs = chain(databases, repeat(None))
+        record_params = zip(record_keys, record_paths, record_dbs)
+
+        metadata = crc.Repomd()
+        for key, path, db_to_update in record_params:
+            record = crc.RepomdRecord(key, str(repodata / path))
+            record.fill(crc.SHA256)
+
+            if db_to_update:
+                db_to_update.dbinfo_update(record.checksum)
+
+            metadata.set_record(record)
+
+        db_stack.close()
+
+        with (repodata / 'repomd.xml').open(mode='w') as ostream:
+            ostream.write(metadata.xml_dump())
+
+    return 'file://{}'.format(repodata.parent.resolve())
