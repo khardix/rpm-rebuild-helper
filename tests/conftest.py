@@ -135,7 +135,7 @@ def minimal_repository_url(minimal_srpm_path):
 
         for pkg_path in pkg_list:
             pkg = crc.package_from_rpm(str(pkg_path))
-            pkg.location_href = str(pkg_path.parent)
+            pkg.location_href = pkg_path.name
 
             for db in xml_files + databases:
                 db.add_pkg(pkg)
@@ -166,4 +166,4 @@ def minimal_repository_url(minimal_srpm_path):
         with (repodata / 'repomd.xml').open(mode='w') as ostream:
             ostream.write(metadata.xml_dump())
 
-    return 'file://{}'.format(repodata.parent.resolve())
+    return 'file://{}/'.format(repodata.parent.resolve())
