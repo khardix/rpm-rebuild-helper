@@ -9,7 +9,7 @@ import requests
 from attr.validators import instance_of
 
 from . import abc
-from .. import rpm
+from .. import rpm, config
 from ..util import system_import
 
 koji = system_import('koji')
@@ -71,6 +71,7 @@ class BuiltPackage(rpm.Metadata):
         return cls.from_mapping(raw_data)
 
 
+@config.register_type('koji', initializer='from_config_profile')
 @attr.s(slots=True, frozen=True)
 class Service(abc.Repository):
     """Interaction session with a Koji build service."""
