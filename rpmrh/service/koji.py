@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Iterator, Mapping, Optional
+from typing import Iterator, Mapping, Optional, Set
 
 import attr
 import requests
@@ -71,9 +71,15 @@ class BuiltPackage(rpm.Metadata):
         return cls.from_mapping(raw_data)
 
 
-@attr.s(init=False, slots=True)
+@attr.s(slots=True, frozen=True)
 class Service(abc.Repository):
     """Interaction session with a Koji build service."""
+
+    #: Tag prefixes associated with this Koji instance
+    tag_prefixes = attr.ib(validator=instance_of(Set), convert=set)
+
+    #: Client configuration for this service
+    configuration = attr.ib(validator=instance_of(Mapping))
 
     #: XMLRPC session for communication with the service
     session = attr.ib(validator=instance_of(koji.ClientSession), init=False)
@@ -81,24 +87,19 @@ class Service(abc.Repository):
     #: Information about remote URLs and paths
     path_info = attr.ib(validator=instance_of(koji.PathInfo), init=False)
 
-    #: Client configuration for this service
-    configuration = attr.ib(
-        validator=instance_of(Mapping),
-        default=attr.Factory(dict),
-    )
+    # Dynamic defaults
 
-    def __init__(self, configuration: Mapping, **kwargs):
-        """Interpret the configuration data.
+    @session.default
+    def configured_session(self):
+        """ClientSession from configuration values."""
+        return koji.ClientSession(self.configuration['server'])
 
-        Keyword arguments:
-            configuration: The configuration dictionary for a Koji profile.
-        """
+    @path_info.default
+    def configured_path_info(self):
+        """PathInfo from configuration values."""
+        return koji.PathInfo(self.configuration['topurl'])
 
-        self.session = koji.ClientSession(configuration['server'])
-        self.path_info = koji.PathInfo(topdir=configuration['topurl'])
-        self.configuration = configuration
-
-        super(Service, self).__init__(**kwargs)
+    # Alternate constructors
 
     @classmethod
     def from_config_profile(cls, profile_name: str, **kwargs) -> 'Service':
@@ -108,9 +109,10 @@ class Service(abc.Repository):
             profile_name: Name of the profile to use.
         """
 
-        configuration = koji.read_config(profile_name)
-
-        return cls(configuration, **kwargs)
+        return cls(
+            configuration=koji.read_config(profile_name),
+            **kwargs,
+        )
 
     # Session authentication
 

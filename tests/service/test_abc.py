@@ -1,5 +1,6 @@
 """Test for the generic service interfaces."""
 
+import attr
 import pytest
 
 from rpmrh.service import abc
@@ -18,7 +19,10 @@ def repository():
 def repository_subclass(repository):
     """Provide a fresh subclass object for abc.Repository."""
 
+    @attr.s(slots=True, frozen=True)
     class Test(abc.Repository):
+
+        tag_prefixes = attr.ib()
 
         def latest_builds(*_, **__):
             return iter([])
@@ -33,6 +37,7 @@ def test_repository_registration(repository, repository_subclass):
     """An instance of Repository subclass is registered on initialization."""
 
     instance = repository_subclass(tag_prefixes={'test'})
+    instance.register()
 
     assert repository.registry['test'] is instance
     assert (

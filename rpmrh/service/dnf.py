@@ -36,22 +36,12 @@ def convert_metadata(package: DNFPackage) -> rpm.Metadata:
     return rpm.Metadata(**{a: getattr(package, a) for a in attributes})
 
 
-@attr.s(slots=True, init=False)
+@attr.s(slots=True, frozen=True)
 class RepoGroup(abc.Repository):
     """Group of managed DNF repositories."""
 
     #: dnf.Base object managing the group
     base = attr.ib(validator=instance_of(dnf.Base))
-
-    def __init__(self, base: dnf.Base, **kwargs):
-        """Initialize the group.
-
-        Note that tag_prefixes for the .abc.Repository are extracted
-        automatically and should not be passed in kwargs.
-        """
-
-        self.base = base
-        super(RepoGroup, self).__init__(**kwargs)
 
     @classmethod
     def configured(cls, repo_configs: Container[Mapping], **kwargs):

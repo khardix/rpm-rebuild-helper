@@ -6,15 +6,12 @@ from typing import ClassVar, Set, Iterator, Optional
 
 import attr
 import requests
-from attr.validators import instance_of
 from pytrie import Trie, StringTrie
 
 from .. import rpm
 
 
-# FIXME: The registry works only with immutable instances
-# => this class (and its subclasses) should be frozen.
-@attr.s(init=False, slots=True)
+@attr.s(slots=True, frozen=True)
 class Repository(metaclass=ABCMeta):
     """A service providing existing packages and their metadata.
 
@@ -25,30 +22,21 @@ class Repository(metaclass=ABCMeta):
     #: Registry of known tag to its associated repository instance
     registry: ClassVar[Trie] = StringTrie()
 
-    #: Set of tags associated with the instance
-    tag_prefixes = attr.ib(validator=instance_of(Set[str]))
-
-    def __init__(self, tag_prefixes: Optional[Set[str]] = None, **other):
-        """Register tags for this instance.
-
-        Keyword arguments:
-            tag_prefixes: Optional set of tag prefixes
-                associated with this instance. Note that
-                if no tag prefixes are registered,
-                the instance will never be used.
-        """
-
-        if tag_prefixes:
-            self.tag_prefixes = tag_prefixes
+    def register(self) -> None:
+        """Register own tag prefixes to Repository.registry."""
 
         for prefix in self.tag_prefixes:
             Repository.registry[prefix] = self
 
-        # Support cooperative multiple inheritance
-        # Note: Since the class is decorated, need to be explicit here
-        super(Repository, self).__init__(**other)
+        # Support multiple inheritance
+        # Decorated class requires explicit arguments
+        getattr(super(Repository, self), 'register', lambda: None)()
 
-    # Required methods
+    # Required methods and properties
+    @property
+    @abstractmethod
+    def tag_prefixes(self) -> Set[str]:
+        """Set of tag prefixes associated with this Repository."""
 
     @abstractmethod
     def latest_builds(self, tag_name: str) -> Iterator[rpm.Metadata]:
