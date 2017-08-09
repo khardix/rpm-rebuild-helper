@@ -12,6 +12,8 @@ from pytrie import Trie, StringTrie
 from .. import rpm
 
 
+# FIXME: The registry works only with immutable instances
+# => this class (and its subclasses) should be frozen.
 @attr.s(init=False, slots=True)
 class Repository(metaclass=ABCMeta):
     """A service providing existing packages and their metadata.
@@ -26,14 +28,18 @@ class Repository(metaclass=ABCMeta):
     #: Set of tags associated with the instance
     tag_prefixes = attr.ib(validator=instance_of(Set[str]))
 
-    def __init__(self, tag_prefixes: Set[str], **other):
+    def __init__(self, tag_prefixes: Optional[Set[str]] = None, **other):
         """Register tags for this instance.
 
         Keyword arguments:
-            tag_prefixes: Set of tag prefixes associated with this instance.
+            tag_prefixes: Optional set of tag prefixes
+                associated with this instance. Note that
+                if no tag prefixes are registered,
+                the instance will never be used.
         """
 
-        self.tag_prefixes = tag_prefixes
+        if tag_prefixes:
+            self.tag_prefixes = tag_prefixes
 
         for prefix in self.tag_prefixes:
             Repository.registry[prefix] = self
