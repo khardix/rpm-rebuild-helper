@@ -39,6 +39,7 @@ DEPENDENCIES = [
     'click',
     'PyTrie',
     'requests',
+    'requests-file',
 ]
 
 TEST_DEPENDENCIES = [  # only for pytest-runner!

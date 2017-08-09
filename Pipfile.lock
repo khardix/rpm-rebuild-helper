@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "87dad6de1654e1ef244d1d8dbcb791366727903db72c0ccb75c95f2cb2bb3e8e"
+            "sha256": "cdcb357819584ab7d028450d463735ea022bfce53846673114476ecb1a0d8d2e"
         },
         "requires": {
             "python_version": "3.5"
@@ -34,6 +34,12 @@
         },
         "requests": {
             "version": "==2.18.3"
+        },
+        "requests-file": {
+            "version": "==1.4.2"
+        },
+        "six": {
+            "version": "==1.10.0"
         },
         "sortedcontainers": {
             "version": "==1.5.7"
