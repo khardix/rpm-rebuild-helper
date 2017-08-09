@@ -40,6 +40,8 @@ DEPENDENCIES = [
     'PyTrie',
     'requests',
     'requests-file',
+    'toml',
+    'pyxdg',
 ]
 
 TEST_DEPENDENCIES = [  # only for pytest-runner!
