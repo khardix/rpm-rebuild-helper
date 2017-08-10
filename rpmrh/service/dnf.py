@@ -7,8 +7,8 @@ import attr
 import requests
 from attr.validators import instance_of
 
-from . import abc
-from .. import rpm, config
+from . import abc, configuration
+from .. import rpm
 from ..util import system_import, default_requests_session
 
 dnf = system_import('dnf')
@@ -36,7 +36,7 @@ def convert_metadata(package: DNFPackage) -> rpm.Metadata:
     return rpm.Metadata(**{a: getattr(package, a) for a in attributes})
 
 
-@config.register_type('dnf', initializer='configured')
+@configuration.register('dnf', initializer='configured')
 @attr.s(slots=True, frozen=True)
 class RepoGroup(abc.Repository):
     """Group of managed DNF repositories."""
@@ -57,15 +57,15 @@ class RepoGroup(abc.Repository):
 
         base = dnf.Base()
 
-        for configuration in repo_configs:
+        for config in repo_configs:
             # Convert arguments to proper API
             arguments = {
-                'repoid': configuration.pop('name'),
+                'repoid': config.pop('name'),
                 'conf': base.conf,
-                'baseurl': [configuration.pop('baseurl')],
+                'baseurl': [config.pop('baseurl')],
             }
 
-            base.repos.add_new_repo(**arguments, **configuration)
+            base.repos.add_new_repo(**arguments, **config)
 
         return cls(base, **kwargs)
 

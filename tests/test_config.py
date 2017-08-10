@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import toml
 
-from rpmrh import config
+from rpmrh import config, service
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def registry():
 def source_type(registry):
     """Registered test source type."""
 
-    @config.register_type('test', registry=registry)
+    @service.register('test', registry=registry)
     class Tested(dict):
         instance_ids = set()
 
@@ -59,55 +59,6 @@ def config_path_sequence(tmpdir, config_file):
         ostream.write(config_file.read())
 
     return [path]
-
-
-def test_register_simple(registry):
-    """Class using __init__ to configure can be registered."""
-
-    @config.register_type('test', registry=registry)
-    class Test:
-        def __init__(self, identification):
-            self.identification = identification
-
-    assert 'test' in registry
-
-    instance = registry['test']('registered')
-
-    assert isinstance(instance, Test)
-    assert instance.identification == 'registered'
-
-
-def test_register_custom_initializer(registry):
-    """Class using custom initializer can be registered."""
-
-    @config.register_type('test', initializer='from_test', registry=registry)
-    class Test:
-        def __init__(self, identification):
-            self.identification = identification
-
-        @classmethod
-        def from_test(cls, original):
-            return cls(original * 2)
-
-    assert 'test' in registry
-
-    instance = registry['test']('reg')
-
-    assert isinstance(instance, Test)
-    assert instance.identification == 'regreg'
-
-
-def test_double_registration_fails(registry):
-    """Second registration of class type raises exception"""
-
-    @config.register_type('test', registry=registry)
-    class A:
-        pass
-
-    with pytest.raises(KeyError):
-        @config.register_type('test', registry=registry)
-        class B:
-            pass
 
 
 def test_single_source_is_instantiated(

@@ -3,58 +3,17 @@
 # TODO: Config file schema and validation
 
 from pathlib import Path
-from typing import Mapping, Callable, Optional, Type, Any, TextIO, Sequence
+from typing import Mapping, Any, TextIO, Sequence
 
 import toml
 
-# Expected type of the type registry
-TypeRegistry = Mapping[str, Callable]
-
-#: Registry of all the types that can be created from configuration
-KNOWN_TYPES: TypeRegistry = {}
-
-
-def register_type(
-    name: str,
-    initializer: Optional[str] = None,
-    *,
-    registry: TypeRegistry = KNOWN_TYPES
-) -> Callable:
-    """Enable a type to be used as a configured source.
-
-    Each type that should be recognized
-    when processing a configuration file
-    have to be decorated with this.
-
-    Keyword arguments:
-        name: The name of the type within a configuration file.
-        initializer: Optional (class-level) callable
-            that should be used for creating instances
-            and processing the configuration values.
-        registry: The mapping to register the type into.
-
-    Returns:
-        A decorator that registers the type.
-    """
-
-    # No duplicates
-    if name in registry:
-        raise KeyError('Type {} already registered!'.format(name))
-
-    def decorator(cls: Type) -> Type:
-        if not initializer:  # use __init__
-            registry[name] = cls
-        else:  # use the initializer with bound class argument
-            registry[name] = getattr(cls, initializer)
-
-        return cls
-    return decorator
+from .service import InitializerMap, REGISTRY as SERVICE_REGISTRY
 
 
 def load_source(
     configuration: Mapping,
     *,
-    registry: TypeRegistry = KNOWN_TYPES
+    registry: InitializerMap = SERVICE_REGISTRY
 ) -> Any:
     """Load single source interface from its configuration.
 
@@ -70,7 +29,11 @@ def load_source(
     return registry[type_name](**configuration)
 
 
-def load_config_file(file: TextIO, *, registry: TypeRegistry = KNOWN_TYPES):
+def load_config_file(
+    file: TextIO,
+    *,
+    registry: InitializerMap = SERVICE_REGISTRY
+):
     """Load and interpret a single configuration file.
 
     Keyword arguments:
@@ -88,7 +51,7 @@ def load_config_file(file: TextIO, *, registry: TypeRegistry = KNOWN_TYPES):
 def load_configuration(
     path_seq: Sequence[Path],
     *,
-    registry: TypeRegistry = KNOWN_TYPES
+    registry: InitializerMap = SERVICE_REGISTRY
 ):
     """Load configuration from the files in path_seq.
 
