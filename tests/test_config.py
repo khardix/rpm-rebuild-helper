@@ -1,5 +1,6 @@
 """Tests for the configuration mechanism"""
 
+from copy import deepcopy
 from io import StringIO
 from pathlib import Path
 
@@ -31,6 +32,19 @@ def source_type(registry):
 
 
 @pytest.fixture
+def service_type(registry):
+    """Registered service type."""
+
+    # Accepts arbitrary initialization arguments
+    # Reports fixed set(s) of interesting propertires
+    @service.register('test-service', registry=registry)
+    class UniversalTestService(dict):
+        tag_prefixes = {'test-tag'}
+
+    return UniversalTestService
+
+
+@pytest.fixture
 def source_configuration(source_type):
     """Raw configuration for the test source."""
 
@@ -40,6 +54,33 @@ def source_configuration(source_type):
         'sequence': ['Hello', 'World'],
         'mapping': {'lang': 'en_US'},
     }
+
+
+@pytest.fixture
+def valid_configuration(service_type):
+    """Raw configuration for the test service."""
+
+    configuration = {
+        'service': [
+            {
+                'type': 'test-service',
+                'scalar': 42,
+                'sequence': ['Hello', 'World'],
+                'mapping': {'lang': 'en_US'},
+            },
+        ],
+    }
+
+    return configuration
+
+
+@pytest.fixture
+def invalid_configuration(valid_configuration):
+    """Raw configuration for the test service."""
+
+    configuration = deepcopy(valid_configuration)
+    del configuration['service'][0]['type']
+    return configuration
 
 
 @pytest.fixture
@@ -59,6 +100,20 @@ def config_path_sequence(tmpdir, config_file):
         ostream.write(config_file.read())
 
     return [path]
+
+
+def test_context_validation_ok(registry, valid_configuration):
+    """Valid configuration is validated properly."""
+
+    ctx = config.Context(valid_configuration, service_registry=registry)
+    assert ctx._raw_config_map
+
+
+def test_context_validation_fail(registry, invalid_configuration):
+    """Invalid configuration is reported."""
+
+    with pytest.raises(config.ConfigurationError):
+        config.Context(invalid_configuration, service_registry=registry)
 
 
 def test_single_source_is_instantiated(
