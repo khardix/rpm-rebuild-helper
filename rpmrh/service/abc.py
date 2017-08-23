@@ -2,11 +2,10 @@
 
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import ClassVar, Set, Iterator, Optional
+from typing import Set, Iterator, Optional
 
 import attr
 import requests
-from pytrie import Trie, StringTrie
 
 from .. import rpm
 
@@ -18,19 +17,6 @@ class Repository(metaclass=ABCMeta):
     Besides defining the required interface, the main job of this class
     is to keep track which of its instances handles which tag.
     """
-
-    #: Registry of known tag to its associated repository instance
-    registry: ClassVar[Trie] = StringTrie()
-
-    def register(self) -> None:
-        """Register own tag prefixes to Repository.registry."""
-
-        for prefix in self.tag_prefixes:
-            Repository.registry[prefix] = self
-
-        # Support multiple inheritance
-        # Decorated class requires explicit arguments
-        getattr(super(Repository, self), 'register', lambda: None)()
 
     # Required methods and properties
     @property
