@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "22c1c22b3630764a2b691a546ad5e757b62281313d1e20d120d54902b8d95120"
+            "sha256": "2b3950e7d332b2ce6f5ce93844d8a87ea9aedac4b4d0c917ebcca3db62b8cc85"
         },
         "requires": {
             "python_version": "3.5"
@@ -17,6 +17,9 @@
         "attrs": {
             "version": "==17.2.0"
         },
+        "cerberus": {
+            "version": "==1.1"
+        },
         "certifi": {
             "version": "==2017.7.27.1"
         },
@@ -27,7 +30,7 @@
             "version": "==6.7"
         },
         "idna": {
-            "version": "==2.5"
+            "version": "==2.6"
         },
         "pytrie": {
             "version": "==0.3"
@@ -36,7 +39,7 @@
             "version": "==0.25"
         },
         "requests": {
-            "version": "==2.18.3"
+            "version": "==2.18.4"
         },
         "requests-file": {
             "version": "==1.4.2"
@@ -65,7 +68,7 @@
             "version": "==3.0.4"
         },
         "idna": {
-            "version": "==2.5"
+            "version": "==2.6"
         },
         "py": {
             "version": "==1.4.34"
@@ -74,10 +77,10 @@
             "version": "==3.2"
         },
         "pytest": {
-            "version": "==3.2.0"
+            "version": "==3.2.1"
         },
         "requests": {
-            "version": "==2.18.3"
+            "version": "==2.18.4"
         },
         "setuptools": {
             "version": "==36.2.7"

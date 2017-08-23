@@ -36,6 +36,7 @@ METADATA = {
 
 DEPENDENCIES = [
     'attrs>=17',
+    'cerberus',
     'click',
     'PyTrie',
     'requests',

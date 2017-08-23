@@ -15,6 +15,7 @@ requests = "*"
 requests-file = "*"
 toml = "*"
 pyxdg = "*"
+Cerberus = "*"
 
 [requires]
 python_version = "3.5"
