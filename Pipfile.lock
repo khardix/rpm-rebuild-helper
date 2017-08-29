@@ -83,7 +83,7 @@
             "version": "==2.18.4"
         },
         "setuptools": {
-            "version": "==36.2.7"
+            "version": "==36.3.0"
         },
         "urllib3": {
             "version": "==1.22"
