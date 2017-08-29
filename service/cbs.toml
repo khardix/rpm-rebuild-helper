@@ -1,0 +1,8 @@
+# CentOS Build Service
+
+[[service]]
+type = 'koji'
+profile_name = 'cbs'
+tag_prefixes = [
+    'sclo', 'devtoolset',
+]
