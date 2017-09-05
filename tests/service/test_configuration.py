@@ -1,6 +1,7 @@
 """Tests for the service configuration mechanism"""
 
 from collections import namedtuple
+from itertools import chain
 
 import pytest
 
@@ -21,6 +22,14 @@ class Registered:
 registered_configuration = pytest.mark.parametrize('service_configuration', [
     {'type': Registered.type_name, 'name': 'configured'},
 ])
+
+
+# service instances for indexing
+service_instances = [
+    namedtuple('Test', ['test_key_set'])({'test', 'key'}),
+    namedtuple('Other', ['other_key_set'])({'other', 'set'}),
+    namedtuple('Unknown', ['unknown_key_set'])({'unknown'}),
+]
 
 
 @pytest.fixture
@@ -47,6 +56,16 @@ def service_index():
     """Empty service index"""
 
     return configuration.Index('test_key_set')
+
+
+@pytest.fixture
+def service_index_group():
+    """Group of empty service indexes"""
+
+    return configuration.IndexGroup({
+        'test': 'test_key_set',
+        'other': 'other_key_set',
+    })
 
 
 def test_register_simple(filled_registry):
@@ -122,10 +141,9 @@ def test_instantiate_raises_unknown(service_configuration, registry):
         configuration.instantiate(service_configuration, registry=registry)
 
 
-def test_index_inserts_matched(service_index):
+@pytest.mark.parametrize('matching', service_instances[0:1])
+def test_index_inserts_matched(matching, service_index):
     """Matching service is indexed."""
-
-    matching = namedtuple('Matching', ['test_key_set'])({'test', 'key'})
 
     inserted = service_index.insert(matching)
 
@@ -134,12 +152,26 @@ def test_index_inserts_matched(service_index):
     assert service_index[matching.test_key_set.pop()] is matching
 
 
-def test_index_pass_unmatched(service_index):
+@pytest.mark.parametrize('other', service_instances[1:2])
+def test_index_pass_unmatched(other, service_index):
     """Mismatching service is passed without exception."""
 
-    mismatching = namedtuple('Mismatching', ['key_set'])({'test', 'key'})
+    passed = service_index.insert(other)
 
-    passed = service_index.insert(mismatching)
+    assert passed is other
+    assert all(key not in service_index for key in other.other_key_set)
 
-    assert passed is mismatching
-    assert all(key not in service_index for key in mismatching.key_set)
+
+@pytest.mark.parametrize('services', service_instances)
+def test_index_group_sorts_correctly(services, service_index_group):
+    """IndexGroup sorts the services properly."""
+
+    test, other, unknown = service_index_group.insert(*service_instances)
+
+    assert all(val is test for val in service_index_group['test'].values())
+    assert all(val is other for val in service_index_group['other'].values())
+
+    all_values = chain.from_iterable(
+        idx.values() for idx in service_index_group.values()
+    )
+    assert all(val is not unknown for val in all_values)
