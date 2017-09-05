@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import os
-import glob
 from pathlib import Path
 from setuptools import setup, find_packages
 
@@ -61,12 +59,6 @@ SETUP_DEPENDENCIES = [
 EXTRA_DEPENDECIES = {
 }
 
-DATA_FILES = {
-    # Built-in service definitions
-    os.path.join('share', METADATA['name']): glob.glob('service/*.toml'),
-}
-
-
 setup(
     **METADATA,
     setup_requires=SETUP_DEPENDENCIES,
@@ -74,5 +66,9 @@ setup(
     tests_require=TEST_DEPENDENCIES,
     extras_require=EXTRA_DEPENDECIES,
     packages=find_packages(exclude={'tests', 'docs', 'service'}),
-    data_files=DATA_FILES.items(),
+    package_data={
+        'rpmrh': [
+            'conf.d/*.service.toml',  # Included service configurations
+        ],
+    },
 )
