@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import pytest
 
-from rpmrh import config, service
+from rpmrh import configuration as config, service
 
 
 @pytest.fixture
@@ -22,7 +22,9 @@ def service_type(registry):
     # Reports fixed set(s) of interesting propertires
     @service.register('test-service', registry=registry)
     class UniversalTestService(dict):
-        tag_prefixes = {'test-tag'}
+        @property
+        def tag_prefixes(self):
+            return self.get('tags', {'test-tag'})
 
     return UniversalTestService
 
@@ -46,6 +48,23 @@ def valid_configuration(service_type):
 
 
 @pytest.fixture
+def valid_configuration_seq(valid_configuration):
+    """Sequence of raw configurations for the test service."""
+
+    extra_configuration = {
+        'services': [
+            {
+                'type': 'test-service',
+                'name': 'extra-service',
+                'tags': {'extra'},
+            },
+        ]
+    }
+
+    return [valid_configuration, extra_configuration]
+
+
+@pytest.fixture
 def invalid_configuration(valid_configuration):
     """Raw configuration for the test service."""
 
@@ -59,63 +78,20 @@ def configured_service(service_type, valid_configuration, registry):
     """Configured instance of the test service."""
 
     configuration = deepcopy(valid_configuration['service'][0])
-    return config._configure_service(configuration, registry=registry)
-
-
-@pytest.fixture
-def tag_index():
-    """Index structure for tag_prefixes."""
-
-    return config.ServiceIndex(key_attribute='tag_prefixes')
-
-
-@pytest.fixture
-def other_index():
-    """Index structure for different key attribute than tag_prefixes."""
-
-    return config.ServiceIndex(key_attribute='other_prefixes')
+    return service.instantiate(configuration, registry=registry)
 
 
 def test_valid_configuration_validates(valid_configuration):
     """Valid configuration passes the validation."""
 
-    assert config._validate_raw_values(valid_configuration)
+    assert config.validate_raw(valid_configuration)
 
 
 def test_invalid_configuration_raises(invalid_configuration):
     """Invalid configuration raises ConfigurationError on validation."""
 
     with pytest.raises(config.ConfigurationError):
-        config._validate_raw_values(invalid_configuration)
-
-
-def test_service_is_configured(service_type, configured_service):
-    """Registered service is correctly configured."""
-
-    assert isinstance(configured_service, service_type)
-    assert configured_service.keys() == {'scalar', 'sequence', 'mapping'}
-
-
-def test_relevant_service_is_indexed(configured_service, tag_index):
-    """Service with proper attribute is inserted into the index."""
-
-    tag_index.insert(configured_service)
-
-    assert all(
-        prefix in tag_index.container
-        for prefix in configured_service.tag_prefixes
-    )
-
-
-def test_irrelevant_service_pass_index(configured_service, other_index):
-    """Service without the attribute is skipped without an exception."""
-
-    other_index.insert(configured_service)
-
-    assert not any(
-        prefix in other_index.container
-        for prefix in configured_service.tag_prefixes
-    )
+        config.validate_raw(invalid_configuration)
 
 
 def test_contex_is_created_from_sigle_mapping(
@@ -125,15 +101,31 @@ def test_contex_is_created_from_sigle_mapping(
 ):
     """Configuration context can be created from a single mapping."""
 
-    print(valid_configuration)
+    print('Valid configuration:', valid_configuration)
 
-    context = config.Context.from_mapping(
+    context = config.Context(
         valid_configuration,
         service_registry=registry,
     )
 
     assert context
     assert all(
-        prefix in context.tag_index.container
+        prefix in context.index['tag']
         for prefix in configured_service.tag_prefixes
     )
+
+
+def test_context_is_created_from_multiple_mappings(
+    valid_configuration_seq,
+    registry
+):
+    """Configuration can be created from multiple mappings."""
+
+    context = config.Context.from_merged(
+        *valid_configuration_seq,
+        service_registry=registry,
+    )
+
+    assert context
+    assert len(context.index['tag']) == 2
+    assert all(tag in context.index['tag'] for tag in {'test-tag', 'extra'})
