@@ -5,7 +5,7 @@ from the application configuration files.
 """
 
 from itertools import chain, product
-from typing import Mapping, MutableMapping, Callable, Tuple, Sequence
+from typing import Mapping, MutableMapping, Callable, Tuple, Sequence, Set
 from typing import Optional, Type, Any, Iterator, Union, Iterable
 
 import attr
@@ -130,6 +130,16 @@ class IndexGroup(MutableMapping):
 
     # Index storage
     _index_map = attr.ib(init=False, default=attr.Factory(dict))
+
+    @property
+    def all_services(self) -> Set:
+        """Quick access to all indexed services."""
+
+        indexed = chain.from_iterable(
+            idx.values() for idx in self._index_map.values()
+        )
+        id_map = {id(service): service for service in indexed}
+        return id_map.values()
 
     def __init__(
         self,

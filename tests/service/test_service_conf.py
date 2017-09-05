@@ -1,7 +1,6 @@
 """Tests for the service configuration mechanism"""
 
 from collections import namedtuple
-from itertools import chain
 
 import pytest
 
@@ -162,16 +161,25 @@ def test_index_pass_unmatched(other, service_index):
     assert all(key not in service_index for key in other.other_key_set)
 
 
-@pytest.mark.parametrize('services', service_instances)
-def test_index_group_sorts_correctly(services, service_index_group):
+@pytest.mark.parametrize('service_seq', [service_instances])
+def test_index_group_reports_unique_services(service_seq, service_index_group):
+    """IndexGroup reports all unique indexed services."""
+
+    test, other, unknown = service_index_group.insert(*service_seq)
+    indexed = service_index_group.all_services
+
+    assert len(indexed) == 2
+    assert test in indexed
+    assert other in indexed
+    assert unknown not in indexed
+
+
+@pytest.mark.parametrize('service_seq', [service_instances])
+def test_index_group_sorts_correctly(service_seq, service_index_group):
     """IndexGroup sorts the services properly."""
 
-    test, other, unknown = service_index_group.insert(*service_instances)
+    test, other, unknown = service_index_group.insert(*service_seq)
 
     assert all(val is test for val in service_index_group['test'].values())
     assert all(val is other for val in service_index_group['other'].values())
-
-    all_values = chain.from_iterable(
-        idx.values() for idx in service_index_group.values()
-    )
-    assert all(val is not unknown for val in all_values)
+    assert all(val is not unknown for val in service_index_group.all_services)
