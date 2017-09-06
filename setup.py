@@ -71,4 +71,9 @@ setup(
             'conf.d/*.service.toml',  # Included service configurations
         ],
     },
+    entry_points={
+        'console_scripts': [
+            'rpmrh=rpmrh.cli:main',
+        ],
+    },
 )
