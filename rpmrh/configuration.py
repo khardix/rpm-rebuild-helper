@@ -1,5 +1,6 @@
 """Configuration file processing"""
 
+from collections import ChainMap
 from functools import reduce
 from pprint import pformat
 from typing import Mapping, MutableMapping, Sequence, Type
@@ -27,6 +28,19 @@ SCHEMA = {
         },
         # New list for each normalized dictionary
         'default_setter': lambda _doc: [],
+    },
+
+    'alias': {  # registered group name aliases
+        'type': 'dict',
+        'keyschema': {'allowed': ['tag']},
+        'valueschema': {
+            'type': 'dict',
+            'keyschema': {'type': 'string'},
+            'valueschema': {'type': 'string'},
+        },
+        'default_setter': lambda _doc: {
+            'tag': ChainMap(),
+        }
     },
 }
 
@@ -71,6 +85,11 @@ def merge_raw(accumulator: MutableMapping, piece: Mapping) -> MutableMapping:
     piece_services = piece.get('services', [])
     accum_services.extend(piece_services)
 
+    # Alias merging -- push the dictionaries
+    accum_alias = accumulator.setdefault('alias', {})
+    for kind, alias_map in piece.get('alias', {}).items():
+        accum_alias.setdefault(kind, ChainMap()).maps.append(alias_map)
+
     return accumulator
 
 
@@ -103,6 +122,9 @@ class Context:
     #: Service indexes
     index = attr.ib(init=False, validator=instance_of(IndexGroup))
 
+    #: Registered aliases
+    alias = attr.ib(validator=instance_of(Mapping))
+
     def __init__(
         self,
         raw_config_map: Mapping,
@@ -122,6 +144,8 @@ class Context:
         self.index = IndexGroup({
             'tag': 'tag_prefixes',
         })
+
+        self.alias = valid.get('alias', {})
 
         attr.validate(self)
 

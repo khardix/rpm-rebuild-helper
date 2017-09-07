@@ -42,6 +42,11 @@ def valid_configuration(service_type):
                 'mapping': {'lang': 'en_US'},
             },
         ],
+        'alias': {
+            'tag': {
+                'test': 'test-tag',
+            },
+        },
     }
 
     return configuration
@@ -58,7 +63,13 @@ def valid_configuration_seq(valid_configuration):
                 'name': 'extra-service',
                 'tags': {'extra'},
             },
-        ]
+        ],
+
+        'alias': {
+            'tag': {
+                'test': 'hidden',
+            },
+        },
     }
 
     return [valid_configuration, extra_configuration]
@@ -113,6 +124,7 @@ def test_contex_is_created_from_sigle_mapping(
         prefix in context.index['tag']
         for prefix in configured_service.tag_prefixes
     )
+    assert context.alias['tag']['test'] == 'test-tag'
 
 
 def test_context_is_created_from_multiple_mappings(
@@ -129,3 +141,4 @@ def test_context_is_created_from_multiple_mappings(
     assert context
     assert len(context.index['tag']) == 2
     assert all(tag in context.index['tag'] for tag in {'test-tag', 'extra'})
+    assert context.alias['tag']['test'] == 'test-tag'
