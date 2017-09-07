@@ -44,7 +44,7 @@ def valid_configuration(service_type):
         ],
         'alias': {
             'tag': {
-                'test': 'test-tag',
+                'test': 'test-tag-{extra}',
             },
         },
     }
@@ -72,7 +72,7 @@ def valid_configuration_seq(valid_configuration):
         },
     }
 
-    return [valid_configuration, extra_configuration]
+    return [deepcopy(valid_configuration), extra_configuration]
 
 
 @pytest.fixture
@@ -92,6 +92,16 @@ def configured_service(service_type, valid_configuration, registry):
     return service.instantiate(configuration, registry=registry)
 
 
+@pytest.fixture
+def context(valid_configuration, registry):
+    """Filled configuration context."""
+
+    return config.Context(
+        deepcopy(valid_configuration),
+        service_registry=registry
+    )
+
+
 def test_valid_configuration_validates(valid_configuration):
     """Valid configuration passes the validation."""
 
@@ -105,26 +115,15 @@ def test_invalid_configuration_raises(invalid_configuration):
         config.validate_raw(invalid_configuration)
 
 
-def test_contex_is_created_from_sigle_mapping(
-    valid_configuration,
-    configured_service,
-    registry
-):
+def test_contex_is_created_from_sigle_mapping(configured_service, context):
     """Configuration context can be created from a single mapping."""
-
-    print('Valid configuration:', valid_configuration)
-
-    context = config.Context(
-        valid_configuration,
-        service_registry=registry,
-    )
 
     assert context
     assert all(
         prefix in context.index[config.GroupKind.TAG]
         for prefix in configured_service.tag_prefixes
     )
-    assert context.alias[config.GroupKind.TAG]['test'] == 'test-tag'
+    assert context.alias[config.GroupKind.TAG]['test'] == 'test-tag-{extra}'
 
 
 def test_context_is_created_from_multiple_mappings(
@@ -144,4 +143,44 @@ def test_context_is_created_from_multiple_mappings(
         tag in context.index[config.GroupKind.TAG]
         for tag in {'test-tag', 'extra'}
     )
-    assert context.alias[config.GroupKind.TAG]['test'] == 'test-tag'
+    assert context.alias[config.GroupKind.TAG]['test'] == 'test-tag-{extra}'
+
+
+def test_context_expand_existing_alias(context):
+    """Context can expand existing alias."""
+
+    full_name = context.unalias(config.GroupKind.TAG, 'test', extra='world')
+
+    assert full_name == 'test-tag-world'
+
+
+def test_context_format_missing_alias(context):
+    """Unregistered alias is formatted."""
+
+    full_name = context.unalias(
+        config.GroupKind.TAG,
+        'no-{name}',
+        name='tomorrow',
+    )
+
+    assert full_name == 'no-tomorrow'
+
+
+def test_context_fetches_correct_service(context, configured_service):
+    """Appropriate service is retrieved"""
+
+    full_name, service = context.group_service(
+        kind=config.GroupKind.TAG,
+        group_name='test',
+        extra='collection',
+    )
+
+    assert full_name == 'test-tag-collection'
+    assert service == configured_service
+
+
+def test_context_reports_missing_service(context):
+    """Exception is raised on missing service."""
+
+    with pytest.raises(KeyError):
+        context.group_service(config.GroupKind.TAG, 'missing')

@@ -4,7 +4,7 @@ from collections import ChainMap
 from enum import Enum
 from functools import reduce
 from pprint import pformat
-from typing import Mapping, MutableMapping, Sequence, Type
+from typing import Mapping, MutableMapping, Sequence, Type, Any, Tuple
 
 import attr
 import cerberus
@@ -192,3 +192,47 @@ class Context:
         merged = reduce(merge_raw, normalized, accumulator)
 
         return cls(merged, **init_kwargs)
+
+    def unalias(self, kind: GroupKind, alias: str, **format_map) -> str:
+        """Expand a registered alias.
+
+        Keyword arguments:
+            kind: The kind of alias to expand.
+            alias: The alias to expand.
+            format_map: Formatting values to be used when expanding.
+
+        Returns:
+            If the alias of matching kind is registered,
+            returns the expanded version.
+            Otherwise, returns the alias with applied formatting.
+        """
+
+        full = self.alias[kind].get(alias, alias)
+        return full.format_map(format_map)
+
+    def group_service(
+        self,
+        kind: GroupKind,
+        group_name: str,
+        **format_map
+    ) -> Tuple[str, Any]:
+        """Retrieve appropriate service for the requested group.
+
+        Keyword arguments:
+            kind: The group kind of the service to retrieve.
+            group_name: Name or alias of the group to retrieve service for.
+            format_map: Formatting values for alias expansion.
+
+        Returns:
+            1. Expanded/unaliased group name.
+            2. Service associated with that group.
+
+        Raises:
+            KeyError: No service of specified kind
+                associated with the group name.
+        """
+
+        group = self.unalias(kind, group_name, **format_map)
+        service = self.index[kind][group]
+
+        return group, service
