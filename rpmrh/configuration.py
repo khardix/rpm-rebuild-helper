@@ -1,6 +1,7 @@
 """Configuration file processing"""
 
 from collections import ChainMap
+from enum import Enum
 from functools import reduce
 from pprint import pformat
 from typing import Mapping, MutableMapping, Sequence, Type
@@ -12,6 +13,12 @@ from attr.validators import instance_of
 
 from .service.configuration import INIT_REGISTRY, InitializerMap, instantiate
 from .service.configuration import IndexGroup
+
+
+class GroupKind(Enum):
+    """Enumeration of recognized package group kinds."""
+
+    TAG = 'tag'
 
 
 #: Configuration file schema
@@ -32,14 +39,14 @@ SCHEMA = {
 
     'alias': {  # registered group name aliases
         'type': 'dict',
-        'keyschema': {'allowed': ['tag']},
+        'keyschema': {'allowed': [kind.value for kind in GroupKind]},
         'valueschema': {
             'type': 'dict',
             'keyschema': {'type': 'string'},
             'valueschema': {'type': 'string'},
         },
         'default_setter': lambda _doc: {
-            'tag': ChainMap(),
+            kind.value: ChainMap() for kind in GroupKind
         }
     },
 }
@@ -142,10 +149,13 @@ class Context:
 
         # Instantiate attributes
         self.index = IndexGroup({
-            'tag': 'tag_prefixes',
+            GroupKind.TAG: 'tag_prefixes',
         })
 
-        self.alias = valid.get('alias', {})
+        self.alias = {
+            kind: valid['alias'].get(kind.value, {})
+            for kind in GroupKind
+        }
 
         attr.validate(self)
 

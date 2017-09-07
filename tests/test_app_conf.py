@@ -121,10 +121,10 @@ def test_contex_is_created_from_sigle_mapping(
 
     assert context
     assert all(
-        prefix in context.index['tag']
+        prefix in context.index[config.GroupKind.TAG]
         for prefix in configured_service.tag_prefixes
     )
-    assert context.alias['tag']['test'] == 'test-tag'
+    assert context.alias[config.GroupKind.TAG]['test'] == 'test-tag'
 
 
 def test_context_is_created_from_multiple_mappings(
@@ -139,6 +139,9 @@ def test_context_is_created_from_multiple_mappings(
     )
 
     assert context
-    assert len(context.index['tag']) == 2
-    assert all(tag in context.index['tag'] for tag in {'test-tag', 'extra'})
-    assert context.alias['tag']['test'] == 'test-tag'
+    assert len(context.index[config.GroupKind.TAG]) == 2
+    assert all(
+        tag in context.index[config.GroupKind.TAG]
+        for tag in {'test-tag', 'extra'}
+    )
+    assert context.alias[config.GroupKind.TAG]['test'] == 'test-tag'
