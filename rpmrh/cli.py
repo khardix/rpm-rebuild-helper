@@ -7,6 +7,7 @@ import click
 import toml
 
 from . import configuration, util
+from .configuration import GroupKind as GK
 
 
 @click.group()
@@ -38,12 +39,18 @@ def main(context):
     '--to', '-t', 'dest_group',
     help='Name of the destination tag.',
 )
+@click.option('--el', type=click.IntRange(6, 8), help='EL version.')
+@click.option('--collection', '-c', help='Collection name.')
 @click.pass_obj
-def diff(config, source_group, dest_group):
+def diff(config, source_group, dest_group, el, collection):
     """List all packages from source tag missing in destination tag."""
 
-    source_service = config.index['tag'][source_group]
-    dest_service = config.index['tag'][dest_group]
+    source_group, source_service = config.group_service(
+        GK.TAG, source_group, el=el, collection=collection,
+    )
+    dest_group, dest_service = config.group_service(
+        GK.TAG, dest_group, el=el, collection=collection,
+    )
 
     # Packages present in destination
     present_packages = {
