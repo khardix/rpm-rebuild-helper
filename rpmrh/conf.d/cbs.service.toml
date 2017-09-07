@@ -3,6 +3,10 @@
 [[service]]
 type = 'koji'
 profile_name = 'cbs'
-tag_prefixes = [
-    'sclo', 'devtoolset',
-]
+tag_prefixes = ['sclo']
+
+[alias.tag]
+sclo = 'sclo{el}-{collection}-rh-candidate'
+sclo-candidate = 'sclo{el}-{collection}-rh-candidate'
+sclo-testing = 'sclo{el}-{collection}-rh-testing'
+sclo-release = 'sclo{el}-{collection}-rh-release'
