@@ -1,7 +1,7 @@
 """Command Line Interface for the package"""
 
 from contextlib import ExitStack
-from itertools import chain, filterfalse
+from itertools import chain
 
 import click
 import toml
@@ -56,6 +56,7 @@ def diff(config, source_group, dest_group, el, collection):
     present_packages = {
         build.name: build
         for build in dest_service.latest_builds(dest_group)
+        if build.name.startswith(collection)
     }
 
     def obsolete(package):
@@ -64,8 +65,11 @@ def diff(config, source_group, dest_group, el, collection):
             and present_packages[package.name] >= package
         )
 
-    missing_candidates = source_service.latest_builds(source_group)
-    missing_packages = filterfalse(obsolete, missing_candidates)
+    missing_packages = (
+        pkg for pkg in source_service.latest_builds(source_group)
+        if pkg.name.startswith(collection)
+        and not obsolete(pkg)
+    )
 
     for pkg in sorted(missing_packages, key=lambda pkg: pkg.name):
         print(pkg.nvr)
