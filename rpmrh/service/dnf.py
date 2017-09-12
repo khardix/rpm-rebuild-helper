@@ -90,7 +90,7 @@ class RepoGroup(abc.Repository):
         self.base.fill_sack(load_system_repo=False)
 
         query = self.base.sack.query()
-        return map(convert_metadata, query.latest())
+        yield from map(convert_metadata, query.latest())
 
     def download(
         self,
