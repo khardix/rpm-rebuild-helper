@@ -7,7 +7,7 @@ import click
 import toml
 
 from . import configuration, util
-from .configuration import GroupKind as GK
+from .service.abc import Repository
 
 
 @click.group()
@@ -45,17 +45,18 @@ def main(context):
 def diff(config, source_group, dest_group, el, collection):
     """List all packages from source tag missing in destination tag."""
 
-    source_group, source_service = config.group_service(
-        GK.TAG, source_group, el=el, collection=collection,
-    )
-    dest_group, dest_service = config.group_service(
-        GK.TAG, dest_group, el=el, collection=collection,
-    )
+    def latest_builds(group):
+        """Fetch latest builds from a group."""
+
+        tag = config.unalias('tag', group, el=el, collection=collection)
+        repo = config.service_index['tag_prefixes'].find(tag, type=Repository)
+
+        yield from repo.latest_builds(tag)
 
     # Packages present in destination
     present_packages = {
         build.name: build
-        for build in dest_service.latest_builds(dest_group)
+        for build in latest_builds(dest_group)
         if build.name.startswith(collection)
     }
 
@@ -66,7 +67,7 @@ def diff(config, source_group, dest_group, el, collection):
         )
 
     missing_packages = (
-        pkg for pkg in source_service.latest_builds(source_group)
+        pkg for pkg in latest_builds(source_group)
         if pkg.name.startswith(collection)
         and not obsolete(pkg)
     )
