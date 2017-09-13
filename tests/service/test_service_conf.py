@@ -24,10 +24,14 @@ registered_configuration = pytest.mark.parametrize('service_configuration', [
 
 
 # service instances for indexing
+Service = namedtuple('Service', ['test_key_set'])
+Other = namedtuple('Other', ['other_key_set'])
+Unknown = namedtuple('Unknown', ['unknown_key_set'])
+
 service_instances = [
-    namedtuple('Test', ['test_key_set'])({'test', 'key'}),
-    namedtuple('Other', ['other_key_set'])({'other', 'set'}),
-    namedtuple('Unknown', ['unknown_key_set'])({'unknown'}),
+    Service({'test', 'key'}),
+    Other({'other', 'set'}),
+    Unknown({'unknown'}),
 ]
 
 
@@ -54,17 +58,33 @@ def filled_registry(registry):
 def service_index():
     """Empty service index"""
 
-    return configuration.Index('test_key_set')
+    return configuration.Index()
+
+
+@pytest.fixture
+def filled_service_index(service_index):
+    """Service index with values filled in"""
+
+    instances = [
+        Service({'test', 'key'}),
+        Service({'tes'}),  # Shorter prefix match
+    ]
+
+    for instance in instances:
+        for key in instance.test_key_set:
+            service_index[key] = instance
+
+    return service_index
 
 
 @pytest.fixture
 def service_index_group():
     """Group of empty service indexes"""
 
-    return configuration.IndexGroup({
-        'test': 'test_key_set',
-        'other': 'other_key_set',
-    })
+    return configuration.IndexGroup(
+        test_key_set=configuration.Index(),
+        other_key_set=configuration.Index(),
+    )
 
 
 def test_register_simple(filled_registry):
@@ -132,6 +152,52 @@ def test_instantiate_make_instance(service_configuration, filled_registry):
     assert instance.name == service_configuration['name']
 
 
+def test_index_finds_prefix(filled_service_index):
+    """Instance can be found in index by one of its keys."""
+
+    instance = filled_service_index.find('test')
+
+    assert instance
+    assert 'test' in instance.test_key_set, 'Not longest prefix match'
+
+
+def test_index_find_raises_on_failure(service_index):
+    """An exception is raised when an instance is not found."""
+
+    with pytest.raises(KeyError):
+        service_index.find('test')
+
+
+def test_index_find_filters_by_type(filled_service_index):
+    """The find function can filter by service type."""
+
+    instance = filled_service_index.find('test', type=Service)
+    assert instance
+    assert isinstance(instance, Service)
+
+    with pytest.raises(KeyError):
+        filled_service_index.find('test', type=Unknown)
+
+
+@pytest.mark.parametrize('attributes,exception_type', [
+    ({'test_key_set'}, None),
+    ({'test_key_set', 'other_attribute'}, KeyError),
+])
+def test_index_find_filters_by_attributes(
+    filled_service_index, attributes, exception_type
+):
+    """The find function can filter by object attributes."""
+
+    if exception_type is not None:
+        with pytest.raises(exception_type):
+            filled_service_index.find('test', attributes=attributes)
+
+    else:
+        instance = filled_service_index.find('test', attributes=attributes)
+        assert instance
+        assert all(hasattr(instance, a) for a in attributes)
+
+
 @registered_configuration
 def test_instantiate_raises_unknown(service_configuration, registry):
     """Exception is raised on unknown type."""
@@ -140,32 +206,11 @@ def test_instantiate_raises_unknown(service_configuration, registry):
         configuration.instantiate(service_configuration, registry=registry)
 
 
-@pytest.mark.parametrize('matching', service_instances[0:1])
-def test_index_inserts_matched(matching, service_index):
-    """Matching service is indexed."""
-
-    inserted = service_index.insert(matching)
-
-    assert inserted is matching
-    assert all(key in service_index for key in matching.test_key_set)
-    assert service_index[matching.test_key_set.pop()] is matching
-
-
-@pytest.mark.parametrize('other', service_instances[1:2])
-def test_index_pass_unmatched(other, service_index):
-    """Mismatching service is passed without exception."""
-
-    passed = service_index.insert(other)
-
-    assert passed is other
-    assert all(key not in service_index for key in other.other_key_set)
-
-
 @pytest.mark.parametrize('service_seq', [service_instances])
 def test_index_group_reports_unique_services(service_seq, service_index_group):
     """IndexGroup reports all unique indexed services."""
 
-    test, other, unknown = service_index_group.insert(*service_seq)
+    test, other, unknown = service_index_group.distribute(*service_seq)
     indexed = service_index_group.all_services
 
     assert len(indexed) == 2
@@ -178,8 +223,14 @@ def test_index_group_reports_unique_services(service_seq, service_index_group):
 def test_index_group_sorts_correctly(service_seq, service_index_group):
     """IndexGroup sorts the services properly."""
 
-    test, other, unknown = service_index_group.insert(*service_seq)
+    test, other, unknown = service_index_group.distribute(*service_seq)
 
-    assert all(val is test for val in service_index_group['test'].values())
-    assert all(val is other for val in service_index_group['other'].values())
+    assert all(
+        val is test
+        for val in service_index_group['test_key_set'].values()
+    )
+    assert all(
+        val is other
+        for val in service_index_group['other_key_set'].values()
+    )
     assert all(val is not unknown for val in service_index_group.all_services)

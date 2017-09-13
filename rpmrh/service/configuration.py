@@ -4,12 +4,11 @@ The registered callables will be used to construct relevant instances
 from the application configuration files.
 """
 
-from itertools import chain, product
-from typing import Mapping, MutableMapping, Callable, Tuple, Sequence, Set
-from typing import Optional, Type, Any, Iterator, Union, Iterable
+from itertools import product
+from typing import Mapping, Callable, Tuple
+from typing import Set, Sequence, Container
+from typing import Optional, Type, Any, Union, Iterable
 
-import attr
-from attr.validators import instance_of
 from pytrie import StringTrie
 
 # Type of service initializer table
@@ -80,137 +79,85 @@ def instantiate(
     return registry[type_name](**service_conf_map)
 
 
-@attr.s(slots=True, frozen=True)
-class Index(Mapping):  # add mixin methods
-    """Service instance index."""
+class Index(StringTrie):
+    """Mapping of group name prefix to matching service instance"""
 
-    # The actual container for the instances
-    _container = attr.ib(init=False, default=attr.Factory(StringTrie))
-
-    #: Name of the attribute to index by.
-    key_attribute = attr.ib(validator=instance_of(str))
-
-    def insert(self, service: Any) -> Any:
-        """Index a service by the matching attribute.
+    def find(
+        self,
+        prefix: str,
+        *,
+        type: Optional[Union[Type, Tuple[Type, ...]]] = None,
+        attributes: Optional[Container[str]] = None
+    ) -> Any:
+        """Find best match for given prefix and parameters.
 
         Keyword arguments:
-            service: The service to index.
+            prefix: The base key to look for.
+            type: The desired type of the result.
+            attributes: The desired attributes of the result.
+                All of them must be present on the result object.
 
         Returns:
-            The service passed as argument.
+            The service fulfilling all the prescribed criteria.
+
+        Raises:
+            KeyError: No service fulfilling the criteria has been found.
         """
 
-        key_set = getattr(service, self.key_attribute, frozenset())
-        for key in key_set:
-            self._container[key] = service
+        # Start from longest prefix
+        candidates = reversed(list(self.iter_prefix_values(prefix)))
 
-        return service
+        if type is not None:
+            candidates = filter(lambda c: isinstance(c, type), candidates)
 
-    # Mapping interface
+        if attributes is not None:
+            def has_all_attributes(obj):
+                return all(hasattr(obj, a) for a in attributes)
+            candidates = filter(has_all_attributes, candidates)
 
-    def __getitem__(self, key: str) -> Any:
-        """Get item with longest prefix match to a key."""
-
-        return self._container.longest_prefix_value(key)
-
-    def __iter__(self) -> Iterator[str]:
-        """Iterate over the contained keys."""
-
-        return iter(self._container)
-
-    def __len__(self) -> int:
-        """Report the size of container."""
-
-        return len(self._container)
+        try:
+            return next(candidates)
+        except StopIteration:  # convert to appropriate exception type
+            message = 'No value with given criteria for {}'.format(prefix)
+            raise KeyError(message) from None
 
 
-@attr.s(slots=True, init=False)
-class IndexGroup(MutableMapping):
-    """Group of tagged indexes."""
+class IndexGroup(dict):
+    """Mapping of key attribute name to :py:class:`Index` of matching services.
 
-    # Index storage
-    _index_map = attr.ib(init=False, default=attr.Factory(dict))
+    A key attribute is an attribute declaring for which groups
+    is the service instance responsible,
+    usually by providing a set of group name prefixes.
+    An example of key attribute is the `Repository.tag_prefixes` attribute.
+    """
 
     @property
     def all_services(self) -> Set:
         """Quick access to all indexed services."""
 
-        indexed = chain.from_iterable(
-            idx.values() for idx in self._index_map.values()
-        )
-        id_map = {id(service): service for service in indexed}
-        return id_map.values()
+        indexed_by_id = {
+            id(service): service
+            for index in self.values()
+            for service in index.values()
+        }
 
-    def __init__(
-        self,
-        initial: Optional[IndexGroupInit] = None,
-        **kwargs
-    ) -> None:
-        """Initialize group of Indexes.
+        return indexed_by_id.values()
 
-        Interface of this function mimics the interface of dict constructor
-        -- see :py:class:`dict` for detailed usage.
+    def distribute(self, *service_seq: Sequence) -> Sequence:
+        """Distribute the services into the appropriate indexes.
 
-        Parameters:
-            Generally, an iterable or mapping of index name/tag
-            to index attribute key name.
-            The values will be processed and turned into proper indexes.
-        """
-
-        if initial is None:
-            initial = ()
-        elif isinstance(initial, Mapping):
-            initial = initial.items()
-
-        # Turn values into indexes
-        initial = (
-            (key, Index(key_attribute=value))
-            for key, value in chain(initial, kwargs.items())
-        )
-
-        self._index_map = dict(initial)
-
-    def insert(self, *service_seq: Sequence) -> Sequence:
-        """Inserts all services to matching indexes.
+        Note that only know (with already existing index) key attributes
+        are considered.
 
         Keyword arguments:
-            service_seq: The services to insert.
+            service_seq: The services to distribute.
 
         Returns:
             The sequence passed as parameter.
         """
 
-        for service, index in product(service_seq, self._index_map.values()):
-            index.insert(service)
+        for attribute_name, service in product(self.keys(), service_seq):
+            for prefix in getattr(service, attribute_name, frozenset()):
+                self[attribute_name][prefix] = service
 
         return service_seq
-
-    # MutableMapping interface
-
-    def __getitem__(self, key):
-        """Get matching index."""
-
-        return self._index_map[key]
-
-    def __setitem__(self, key, value):
-        """Transform the value into and index, if necessary."""
-
-        if not isinstance(value, Index):
-            value = Index(key_attribute=value)
-
-        self._index_map[key] = value
-
-    def __delitem__(self, key):
-        """Drop the matching index."""
-
-        del self._index_map[key]
-
-    def __iter__(self):
-        """Iterate over the indexes."""
-
-        return iter(self._index_map)
-
-    def __len__(self):
-        """Report the number of indexes."""
-
-        return len(self._index_map)
