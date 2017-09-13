@@ -96,7 +96,7 @@ def configured_service(service_type, valid_configuration, registry):
 def context(valid_configuration, registry):
     """Filled configuration context."""
 
-    return config.Context(
+    return config.Context.from_raw(
         deepcopy(valid_configuration),
         service_registry=registry
     )
@@ -109,9 +109,9 @@ def test_valid_configuration_validates(valid_configuration):
 
 
 def test_invalid_configuration_raises(invalid_configuration):
-    """Invalid configuration raises ConfigurationError on validation."""
+    """Invalid configuration raises ValidationError on validation."""
 
-    with pytest.raises(config.ConfigurationError):
+    with pytest.raises(config.ValidationError):
         config.validate_raw(invalid_configuration)
 
 
@@ -120,10 +120,10 @@ def test_contex_is_created_from_sigle_mapping(configured_service, context):
 
     assert context
     assert all(
-        prefix in context.index[config.GroupKind.TAG]
+        prefix in context.service_index['tag_prefixes']
         for prefix in configured_service.tag_prefixes
     )
-    assert context.alias[config.GroupKind.TAG]['test'] == 'test-tag-{extra}'
+    assert context.alias['tag']['test'] == 'test-tag-{extra}'
 
 
 def test_context_is_created_from_multiple_mappings(
@@ -138,18 +138,18 @@ def test_context_is_created_from_multiple_mappings(
     )
 
     assert context
-    assert len(context.index[config.GroupKind.TAG]) == 2
+    assert len(context.service_index['tag_prefixes']) == 2
     assert all(
-        tag in context.index[config.GroupKind.TAG]
+        tag in context.service_index['tag_prefixes']
         for tag in {'test-tag', 'extra'}
     )
-    assert context.alias[config.GroupKind.TAG]['test'] == 'test-tag-{extra}'
+    assert context.alias['tag']['test'] == 'test-tag-{extra}'
 
 
 def test_context_expand_existing_alias(context):
     """Context can expand existing alias."""
 
-    full_name = context.unalias(config.GroupKind.TAG, 'test', extra='world')
+    full_name = context.unalias('tag', 'test', extra='world')
 
     assert full_name == 'test-tag-world'
 
@@ -158,29 +158,9 @@ def test_context_format_missing_alias(context):
     """Unregistered alias is formatted."""
 
     full_name = context.unalias(
-        config.GroupKind.TAG,
+        'tag',
         'no-{name}',
         name='tomorrow',
     )
 
     assert full_name == 'no-tomorrow'
-
-
-def test_context_fetches_correct_service(context, configured_service):
-    """Appropriate service is retrieved"""
-
-    full_name, service = context.group_service(
-        kind=config.GroupKind.TAG,
-        group_name='test',
-        extra='collection',
-    )
-
-    assert full_name == 'test-tag-collection'
-    assert service == configured_service
-
-
-def test_context_reports_missing_service(context):
-    """Exception is raised on missing service."""
-
-    with pytest.raises(KeyError):
-        context.group_service(config.GroupKind.TAG, 'missing')
