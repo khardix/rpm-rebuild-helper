@@ -7,8 +7,9 @@ import attr
 import requests
 from attr.validators import instance_of
 
-from . import abc, configuration
+from . import abc
 from .. import rpm
+from ..configuration import service
 from ..util import system_import, default_requests_session
 
 dnf = system_import('dnf')
@@ -36,7 +37,7 @@ def convert_metadata(package: DNFPackage) -> rpm.Metadata:
     return rpm.Metadata(**{a: getattr(package, a) for a in attributes})
 
 
-@configuration.register('dnf', initializer='configured')
+@service.register('dnf', initializer='configured')
 @attr.s(slots=True, frozen=True)
 class RepoGroup(abc.Repository):
     """Group of managed DNF repositories."""
