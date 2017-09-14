@@ -27,7 +27,7 @@ def main(context):
         streams = map(opened.enter_context, all_config_streams)
         contents = map(toml.load, streams)
 
-        context.obj = configuration.Context.from_merged(*contents)
+        context.obj = configuration.InstanceRegistry.from_merged(*contents)
 
 
 @main.command()
@@ -49,7 +49,7 @@ def diff(config, source_group, dest_group, el, collection):
         """Fetch latest builds from a group."""
 
         tag = config.unalias('tag', group, el=el, collection=collection)
-        repo = config.service_index['tag_prefixes'].find(tag, type=Repository)
+        repo = config.index['tag_prefixes'].find(tag, type=Repository)
 
         yield from repo.latest_builds(tag)
 
