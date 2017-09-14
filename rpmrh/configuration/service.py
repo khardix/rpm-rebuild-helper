@@ -4,15 +4,21 @@ The registered callables will be used to construct relevant instances
 from the application configuration files.
 """
 
+from functools import reduce
 from itertools import product
-from typing import Mapping, Callable, Tuple
+from typing import Mapping, Callable, Tuple, MutableMapping
 from typing import Set, Sequence, Container
 from typing import Optional, Type, Any, Union, Iterable
 
+import attr
+import cerberus
+from attr.validators import instance_of
 from pytrie import StringTrie
 
+from .validation import SCHEMA, GroupKind, validate_raw, merge_raw
+
 # Type of service initializer table
-InitializerMap = Mapping[str, Callable]
+InitializerMap = MutableMapping[str, Callable]
 # Adapted type of dict initializer
 IndexGroupInit = Union[Mapping[str, str], Iterable[Tuple[str, str]]]
 
@@ -57,7 +63,7 @@ def register(
 
 
 def instantiate(
-    service_conf_map: Mapping,
+    service_conf_map: MutableMapping,
     *,
     registry: InitializerMap = INIT_REGISTRY
 ) -> Any:
@@ -161,3 +167,96 @@ class IndexGroup(dict):
                 self[attribute_name][prefix] = service
 
         return service_seq
+
+
+@attr.s(slots=True)
+class InstanceRegistry:
+    """Container object for configured instances."""
+
+    #: Indexed service by their key attribute and group name prefix
+    index = attr.ib(validator=instance_of(IndexGroup))
+
+    #: Registered alias mapping by its kind
+    alias = attr.ib(validator=instance_of(Mapping))
+
+    @classmethod
+    def from_raw(
+        cls,
+        raw_configuration: Mapping,
+        *,
+        service_registry: InitializerMap = INIT_REGISTRY
+    ) -> 'Context':
+        """Create new configuration context from raw configuration values.
+
+        Keyword arguments:
+            raw_configuration: The setting to create the context from.
+            service_registry: The registry to use
+                for indirect service instantiation.
+
+        Returns:
+            Initialized Context.
+        """
+
+        valid = validate_raw(raw_configuration)
+
+        attributes = {
+            'index': IndexGroup(
+                (g.key_attribute, Index()) for g in GroupKind
+            ),
+            'alias': valid['alias'],
+        }
+
+        # Distribute the services
+        attributes['index'].distribute(*(
+            instantiate(service_conf, registry=service_registry)
+            for service_conf in valid['services']
+        ))
+
+        return cls(**attributes)
+
+    @classmethod
+    def from_merged(
+        cls,
+        *raw_configuration_seq: Sequence[Mapping],
+        service_registry: InitializerMap = INIT_REGISTRY
+    ) -> 'Context':
+        """Create configuration context from multiple configuration mappings.
+
+        Keyword arguments:
+            raw_configuration_seq: The configuration values
+                to be merged and used for context construction.
+            service_registry: The registry to use
+                for indirect service instantiation.
+
+        Returns:
+            Initialized Context.
+        """
+
+        normalized = cerberus.Validator(schema=SCHEMA).normalized
+
+        # Use default values from schema to initialize the accumulator
+        accumulator = normalized({})
+        norm_sequence = map(normalized, raw_configuration_seq)
+        merged = reduce(merge_raw, norm_sequence, accumulator)
+
+        return cls.from_raw(merged, service_registry=service_registry)
+
+    def unalias(self, kind: str, alias: str, **format_map: Mapping) -> str:
+        """Resolve a registered alias.
+
+        Keyword arguments:
+            kind: The kind of alias to expand.
+            alias: The value to expand.
+            format_map: Formatting values for alias expansion.
+
+        Returns:
+            Expanded alias, if matching definition was found.
+            The formatted alias itself, in no matching definition was found.
+
+        Raises:
+            KeyError: Unknown alias kind.
+            KeyError: Missing formatting keys.
+        """
+
+        expanded = self.alias[kind].get(alias, alias)
+        return expanded.format_map(format_map)

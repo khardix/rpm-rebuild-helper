@@ -79,15 +79,22 @@ def merge_raw(accumulator: MutableMapping, piece: Mapping) -> MutableMapping:
         Updated accumulator.
     """
 
+    normalized = cerberus.Validator(schema=SCHEMA).normalized
+
+    accumulator = normalized(accumulator)
+    piece = normalized(piece)
+
     # Service merging -- append the sequence
-    accum_services = accumulator.setdefault('services', [])
-    piece_services = piece.get('services', [])
-    accum_services.extend(piece_services)
+    accumulator['services'].extend(piece['services'])
 
     # Alias merging -- push the dictionaries
-    accum_alias = accumulator.setdefault('alias', {})
-    for kind, alias_map in piece.get('alias', {}).items():
-        accum_alias.setdefault(kind, ChainMap()).maps.append(alias_map)
+    for kind, alias_map in piece['alias'].items():
+        accum_kind_map = accumulator['alias'][kind]
+        try:  # Use ChainMap, if present
+            accum_kind_map.maps.append(alias_map)
+        except AttributeError:  # do an update in the right order
+            alias_map.update(accum_kind_map)
+            accumulator['alias'][kind] = alias_map
 
     return accumulator
 
