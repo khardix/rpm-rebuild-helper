@@ -6,7 +6,7 @@ from the application configuration files.
 
 from functools import reduce
 from itertools import product
-from typing import Mapping, Callable, Tuple
+from typing import Mapping, Callable, Tuple, MutableMapping
 from typing import Set, Sequence, Container
 from typing import Optional, Type, Any, Union, Iterable
 
@@ -18,7 +18,7 @@ from pytrie import StringTrie
 from .validation import SCHEMA, GroupKind, validate_raw, merge_raw
 
 # Type of service initializer table
-InitializerMap = Mapping[str, Callable]
+InitializerMap = MutableMapping[str, Callable]
 # Adapted type of dict initializer
 IndexGroupInit = Union[Mapping[str, str], Iterable[Tuple[str, str]]]
 
@@ -63,7 +63,7 @@ def register(
 
 
 def instantiate(
-    service_conf_map: Mapping,
+    service_conf_map: MutableMapping,
     *,
     registry: InitializerMap = INIT_REGISTRY
 ) -> Any:
@@ -174,7 +174,7 @@ class InstanceRegistry:
     """Container object for configured instances."""
 
     #: Indexed service by their key attribute and group name prefix
-    service_index = attr.ib(validator=instance_of(IndexGroup))
+    index = attr.ib(validator=instance_of(IndexGroup))
 
     #: Registered alias mapping by its kind
     alias = attr.ib(validator=instance_of(Mapping))
@@ -200,14 +200,14 @@ class InstanceRegistry:
         valid = validate_raw(raw_configuration)
 
         attributes = {
-            'service_index': IndexGroup(
+            'index': IndexGroup(
                 (g.key_attribute, Index()) for g in GroupKind
             ),
             'alias': valid['alias'],
         }
 
         # Distribute the services
-        attributes['service_index'].distribute(*(
+        attributes['index'].distribute(*(
             instantiate(service_conf, registry=service_registry)
             for service_conf in valid['services']
         ))
