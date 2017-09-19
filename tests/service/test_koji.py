@@ -163,6 +163,5 @@ def test_service_download(service, tmpdir, built_package):
     """Ensure the built package can be downloaded."""
 
     result = service.download(built_package, Path(str(tmpdir)))
-    result_metadata = rpm.Metadata.from_path(result)
 
-    assert result_metadata == built_package
+    assert result == built_package

@@ -160,7 +160,7 @@ class Service(abc.Repository):
         target_dir: Path,
         *,
         session: Optional[requests.Session] = None
-    ) -> Path:
+    ) -> rpm.LocalPackage:
         """Download a single package from the service.
 
         Keyword arguments:
@@ -205,4 +205,4 @@ class Service(abc.Repository):
             for chunk in response.iter_content(chunk_size=256):
                 ostream.write(chunk)
 
-        return target_file_path
+        return rpm.LocalPackage.from_path(target_file_path)

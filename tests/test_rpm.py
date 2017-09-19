@@ -24,21 +24,21 @@ def metadata(request) -> rpm.Metadata:
     return rpm.Metadata(**request.param)
 
 
+@pytest.fixture
+def local_pkg(metadata, minimal_srpm_path) -> rpm.LocalPackage:
+    """Provide LocalPackage object"""
+
+    return rpm.LocalPackage(
+        **attr.asdict(metadata),
+        path=minimal_srpm_path,
+    )
+
+
 def test_construction_from_file(minimal_srpm_path):
     """Metadata can be read from open file."""
 
     with minimal_srpm_path.open(mode='rb') as istream:
         metadata = rpm.Metadata.from_file(istream)
-
-    assert metadata.name == 'test'
-    assert metadata.epoch == 0
-    assert metadata.arch == 'src'
-
-
-def test_construction_from_path(minimal_srpm_path):
-    """Metadata can be read for a file path."""
-
-    metadata = rpm.Metadata.from_path(minimal_srpm_path)
 
     assert metadata.name == 'test'
     assert metadata.epoch == 0
@@ -59,6 +59,19 @@ def test_nevra_format(metadata):
     nevra_format = '{name}-{epoch}:{version}-{release}.{arch}'
 
     assert metadata.nevra == nevra_format.format_map(attr.asdict(metadata))
+
+
+def test_canonical_name_format(metadata):
+    """Ensure that the canonical name is constructed properly"""
+
+    if metadata.epoch:
+        canonical_format = '{name}-{epoch}:{version}-{release}.{arch}.rpm'
+    else:
+        canonical_format = '{name}-{version}-{release}.{arch}.rpm'
+
+    assert metadata.canonical_file_name == canonical_format.format_map(
+        attr.asdict(metadata)
+    )
 
 
 def test_compare_as_expected(metadata):
@@ -87,3 +100,14 @@ def test_metadata_are_hashable(metadata):
 
     assert hash(metadata)
     assert len({metadata, metadata}) == 1
+
+
+def test_construction_from_path(minimal_srpm_path):
+    """Metadata can be read for a file path."""
+
+    metadata = rpm.LocalPackage.from_path(minimal_srpm_path)
+
+    assert metadata.name == 'test'
+    assert metadata.epoch == 0
+    assert metadata.arch == 'src'
+    assert metadata.path == minimal_srpm_path

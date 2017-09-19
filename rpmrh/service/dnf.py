@@ -99,7 +99,7 @@ class RepoGroup(abc.Repository):
         target_dir: Path,
         *,
         session: Optional[requests.Session] = None
-    ) -> Path:
+    ) -> rpm.LocalPackage:
         """Download a single package from the Repository.
 
         Keyword arguments:
@@ -117,7 +117,11 @@ class RepoGroup(abc.Repository):
         self.base.fill_sack(load_system_repo=False)
 
         query = self.base.sack.query()
-        candidate, = query.filter(**attr.asdict(package))
+        candidate, = query.filter(**attr.asdict(
+            package,
+            # filter=attr.filters.include(*attr.fields(rpm.Metadata)),
+            filter=lambda attrib, _val: attrib in attr.fields(rpm.Metadata),
+        ))
         source_url = candidate.remote_location()
 
         response = session.get(source_url, stream=True)
@@ -128,4 +132,4 @@ class RepoGroup(abc.Repository):
             for chunk in response.iter_content(chunk_size=256):
                 ostream.write(chunk)
 
-        return target_path
+        return rpm.LocalPackage.from_path(target_path)
