@@ -1,12 +1,14 @@
 """Command Line Interface for the package"""
 
 from contextlib import ExitStack
-from itertools import chain
+from functools import reduce
+from itertools import chain, repeat
 
 import attr
 import click
 import toml
 from attr.validators import instance_of
+from ruamel import yaml
 
 from . import configuration, util
 from .service.abc import Repository
@@ -51,7 +53,8 @@ class Parameters:
 pass_parameters = click.make_pass_decorator(Parameters)
 
 
-@click.group()
+# Commands
+@click.group(chain=True)
 @click.option(
     '--from', '-f', 'source',
     help='Name of a source group (tag, target, ...).'
@@ -64,8 +67,12 @@ pass_parameters = click.make_pass_decorator(Parameters)
     '--el', '-e', type=click.IntRange(6), default=7,
     help='Major EL version.',
 )
+@click.option(
+    '--collection', '-c', 'collection_seq', multiple=True,
+    help='Name of the SCL to work with (can be used multiple times).'
+)
 @click.pass_context
-def main(context, **config_options):
+def main(context, collection_seq, **config_options):
     """RPM Rebuild Helper – an automation tool for mass RPM rebuilding,
     with focus on Software Collections.
     """
@@ -74,42 +81,75 @@ def main(context, **config_options):
     context.obj = Parameters(**config_options)
 
 
-@main.command()
-@click.option('--collection', '-c', help='Collection name.')
-@pass_parameters
-def diff(params, collection):
-    """List all packages from source tag missing in destination tag."""
+@main.resultcallback()
+@click.pass_context
+def run_chain(context, processor_seq, collection_seq, **_config_options):
+    """Run a sequence of collections through a processor sequence.
 
-    def latest_builds(group):
-        """Fetch latest builds from a group."""
+    Keyword arguments:
+        processor_seq: The callables to apply to the collection sequence.
+        collection_seq: The sequence of SCL names to be processed.
+    """
 
-        tag = params.service.unalias(
-            'tag', group,
-            el=params.el,
-            collection=collection
-        )
-        repo = params.service.index['tag_prefixes'].find(tag, type=Repository)
+    # TODO: Start with latest packages from each collection
+    collection_seq = zip(collection_seq, repeat(None))
 
-        yield from repo.latest_builds(tag)
-
-    # Packages present in destination
-    present_packages = {
-        build.name: build
-        for build in latest_builds(params.destination)
-        if build.name.startswith(collection)
-    }
-
-    def obsolete(package):
-        return (
-            package.name in present_packages
-            and present_packages[package.name] >= package
-        )
-
-    missing_packages = (
-        pkg for pkg in latest_builds(params.source)
-        if pkg.name.startswith(collection)
-        and not obsolete(pkg)
+    # Apply the processors
+    pipeline = reduce(
+        lambda data, proc: proc(data),
+        processor_seq,
+        collection_seq
     )
 
-    for pkg in sorted(missing_packages, key=lambda pkg: pkg.name):
-        print(pkg.nvr)
+    # Output the results in YAML format
+    stdout = click.get_text_stream('stdout', encoding='utf-8')
+    for collection, packages in pipeline:
+        yaml.dump(
+            {collection: sorted(map(str, packages))},
+            stream=stdout,
+            default_flow_style=False,
+        )
+
+
+@main.command()
+@pass_parameters
+def diff(params):
+    """List all packages from source tag missing in destination tag."""
+
+    def processor(collections):
+        for collection, __ in collections:
+            def latest_builds(group):
+                """Fetch latest builds from a group."""
+
+                tag = params.service.unalias(
+                    'tag', group,
+                    el=params.el,
+                    collection=collection
+                )
+                repo = params.service.index['tag_prefixes'].find(
+                    tag, type=Repository
+                )
+
+                yield from repo.latest_builds(tag)
+
+            # Packages present in destination
+            present = {
+                build.name: build
+                for build in latest_builds(params.destination)
+                if build.name.startswith(collection)
+            }
+
+            def obsolete(package):
+                return (
+                    package.name in present
+                    and present[package.name] >= package
+                )
+
+            missing = (
+                pkg for pkg in latest_builds(params.source)
+                if pkg.name.startswith(collection)
+                and not obsolete(pkg)
+            )
+
+            yield collection, missing
+    return processor
