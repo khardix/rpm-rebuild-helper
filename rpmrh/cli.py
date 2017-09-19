@@ -4,6 +4,7 @@ from contextlib import ExitStack
 from functools import reduce, wraps
 from itertools import chain, repeat
 from operator import itemgetter
+from pathlib import Path
 from typing import Callable, Iterator
 
 import attr
@@ -177,3 +178,31 @@ def diff(params, collection_stream):
         )
 
         yield collection, missing
+
+
+@main.command()
+@click.option(
+    '--output-dir', '-d', metavar='DIR',
+    type=click.Path(file_okay=False, writable=True),
+    default='.',
+    help='Target directory for downloaded packages [default: "."].'
+)
+@processor
+@click.pass_obj
+def download(params, collection_stream, output_dir):
+    """Download packages into specified directory."""
+
+    output_dir = Path(output_dir).resolve()
+
+    for collection, packages in collection_stream:
+        tag = params.service.unalias(
+            'tag', params.source, el=params.el, collection=collection,
+        )
+        repo = params.service.index['tag_prefixes'].find(tag, type=Repository)
+        collection_dir = output_dir / collection
+
+        collection_dir.mkdir(exist_ok=True)
+
+        paths = map(repo.download, packages, repeat(collection_dir))
+
+        yield collection, paths
