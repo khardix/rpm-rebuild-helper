@@ -42,7 +42,7 @@ class Repository(metaclass=ABCMeta):
         target_dir: Path,
         *,
         session: Optional[requests.Session] = None
-    ) -> Path:
+    ) -> rpm.LocalPackage:
         """Download a single package from the Repository.
 
         Keyword arguments:

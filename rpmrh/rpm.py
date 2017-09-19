@@ -17,6 +17,13 @@ CompareOperator = Callable[[TypeVar('T'), TypeVar('T')], bool]
 CompareResult = Union[bool, type(NotImplemented)]
 
 
+# Helper for ensuring resolved paths
+def _resolve_path(path: Union[str, Path]) -> Path:
+    """Resolve the path argument"""
+
+    return Path(path).resolve()
+
+
 @attr.s(slots=True, cmp=False, frozen=True, hash=True)
 class Metadata:
     """Generic RPM metadata.
@@ -75,20 +82,6 @@ class Metadata:
 
         return cls(**attributes)
 
-    @classmethod
-    def from_path(cls, path: Path) -> 'Metadata':
-        """Read metadata for specified RPM file path.
-
-        Keyword arguments:
-            path: The path to the file to read metadata for.
-
-        Returns:
-            New instance of Metadata.
-        """
-
-        with path.open(mode='rb') as file:
-            return cls.from_file(file)
-
     # Derived attributes
 
     @property
@@ -110,6 +103,17 @@ class Metadata:
         """Label compatible with RPM's C API."""
 
         return (str(self.epoch), self.version, self.release)
+
+    @property
+    def canonical_file_name(self):
+        """Canonical base file name of a package with this metadata."""
+
+        if self.epoch:
+            format = '{s.name}-{s.epoch}:{s.version}-{s.release}.{s.arch}.rpm'
+        else:
+            format = '{s.name}-{s.version}-{s.release}.{s.arch}.rpm'
+
+        return format.format(s=self)
 
     # Comparison methods
     def _compare(self, other: 'Metadata', oper: CompareOperator) -> CompareResult:  # noqa: E501
@@ -139,3 +143,53 @@ class Metadata:
     __le__ = partialmethod(_compare, oper=operator.le)
     __gt__ = partialmethod(_compare, oper=operator.gt)
     __ge__ = partialmethod(_compare, oper=operator.ge)
+
+    # String representations
+    def __str__(self) -> str:
+        return self.nevra
+
+
+@attr.s(slots=True, frozen=True, hash=True, cmp=False)
+class LocalPackage(Metadata):
+    """Metadata of existing RPM package on local file system."""
+
+    #: Resolved path to the RPM package
+    path = attr.ib(convert=_resolve_path)
+
+    @path.default
+    def pkg_in_cwd(self):
+        """Canonically named package in current directory"""
+
+        return Path.cwd() / self.canonical_file_name
+
+    @path.validator
+    def existing_file_path(self, _attribute, path):
+        """The path must point to an existing file"""
+
+        if not path.is_file():
+            raise FileNotFoundError(path)
+
+    # Alternative constructors
+    @classmethod
+    def from_path(cls, path: Path) -> 'Metadata':
+        """Read metadata for specified RPM file path.
+
+        Keyword arguments:
+            path: The path to the file to read metadata for.
+
+        Returns:
+            New instance of LocalPackage.
+        """
+
+        with path.open(mode='rb') as file:
+            metadata = attr.asdict(Metadata.from_file(file))
+
+        return cls(**metadata, path=path)
+
+    # Path-like protocol
+    def __fspath__(self) -> str:
+        return str(self.path)
+
+    # String representation
+    def __str__(self):
+        return self.__fspath__()

@@ -65,7 +65,7 @@ def test_repo_builds_are_reported(configured_group, minimal_srpm_path):
     build, = builds
 
     assert isinstance(build, rpm.Metadata)
-    assert build == rpm.Metadata.from_path(minimal_srpm_path)
+    assert build == rpm.LocalPackage.from_path(minimal_srpm_path)
 
 
 def test_packages_are_downloaded(
@@ -76,10 +76,10 @@ def test_packages_are_downloaded(
     """Packages can be downloaded from the repo"""
 
     target_dir = Path(str(tmpdir_factory.mktemp('dnf-download')))
-    request = rpm.Metadata.from_path(minimal_srpm_path)
+    request = rpm.LocalPackage.from_path(minimal_srpm_path)
 
     result = configured_group.download(request, target_dir)
 
     assert result
-    assert result.relative_to(target_dir)
-    assert rpm.Metadata.from_path(result) == request
+    assert result.path.relative_to(target_dir)
+    assert result == request
