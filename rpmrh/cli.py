@@ -1,8 +1,10 @@
 """Command Line Interface for the package"""
 
 from contextlib import ExitStack
-from functools import reduce
+from functools import reduce, wraps
 from itertools import chain, repeat
+from operator import itemgetter
+from typing import Callable, Iterator
 
 import attr
 import click
@@ -50,7 +52,30 @@ class Parameters:
 
 
 # Command decorators
-pass_parameters = click.make_pass_decorator(Parameters)
+def processor(func: Callable):
+    """Process a sequence of (SCL collection, its package iterator) pairs. """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        def bound(stream: Iterator):  # bind args, kwargs, wait for the stream
+            return func(stream, *args, **kwargs)
+        return bound
+    return wrapper
+
+
+def generator(func: Callable):
+    """Add package iterators to a sequence of SCL names.
+
+    Any existing package iterators are discarded.
+    """
+
+    @wraps(func)
+    @processor
+    def wrapper(stream, *args, **kwargs):
+        # Discard the existing package iterators
+        stream = map(itemgetter(0), stream)
+        return func(stream, *args, **kwargs)
+    return wrapper
 
 
 # Commands
@@ -112,44 +137,43 @@ def run_chain(context, processor_seq, collection_seq, **_config_options):
 
 
 @main.command()
-@pass_parameters
-def diff(params):
+@generator
+@click.pass_obj
+def diff(params, collection_stream):
     """List all packages from source tag missing in destination tag."""
 
-    def processor(collections):
-        for collection, __ in collections:
-            def latest_builds(group):
-                """Fetch latest builds from a group."""
+    for collection in collection_stream:
+        def latest_builds(group):
+            """Fetch latest builds from a group."""
 
-                tag = params.service.unalias(
-                    'tag', group,
-                    el=params.el,
-                    collection=collection
-                )
-                repo = params.service.index['tag_prefixes'].find(
-                    tag, type=Repository
-                )
-
-                yield from repo.latest_builds(tag)
-
-            # Packages present in destination
-            present = {
-                build.name: build
-                for build in latest_builds(params.destination)
-                if build.name.startswith(collection)
-            }
-
-            def obsolete(package):
-                return (
-                    package.name in present
-                    and present[package.name] >= package
-                )
-
-            missing = (
-                pkg for pkg in latest_builds(params.source)
-                if pkg.name.startswith(collection)
-                and not obsolete(pkg)
+            tag = params.service.unalias(
+                'tag', group,
+                el=params.el,
+                collection=collection
+            )
+            repo = params.service.index['tag_prefixes'].find(
+                tag, type=Repository
             )
 
-            yield collection, missing
-    return processor
+            yield from repo.latest_builds(tag)
+
+        # Packages present in destination
+        present = {
+            build.name: build
+            for build in latest_builds(params.destination)
+            if build.name.startswith(collection)
+        }
+
+        def obsolete(package):
+            return (
+                package.name in present
+                and present[package.name] >= package
+            )
+
+        missing = (
+            pkg for pkg in latest_builds(params.source)
+            if pkg.name.startswith(collection)
+            and not obsolete(pkg)
+        )
+
+        yield collection, missing
