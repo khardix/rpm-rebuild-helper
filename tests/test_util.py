@@ -24,11 +24,11 @@ def mock_package_resources(monkeypatch):
     }
 
     monkeypatch.setattr(
-        util, 'resource_listdir',
+        util.filesystem, 'resource_listdir',
         lambda __, path: dir_listing[path],
     )
     monkeypatch.setattr(
-        util, 'resource_stream',
+        util.filesystem, 'resource_stream',
         lambda __, path: file_contents[path],
     )
 
