@@ -12,23 +12,10 @@ import attr
 import click
 import toml
 from attr.validators import instance_of
-from click_log import ColorFormatter
 from ruamel import yaml
 
 from . import configuration, util
 from .service.abc import Repository
-
-
-class ClickErrHandler(logging.Handler):
-    """Log to stderr using click."""
-
-    def emit(self, record):
-        try:
-            click.echo(self.format(record), err=True)
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except:
-            self.handleError(record)
 
 
 @attr.s(slots=True, frozen=True)
@@ -95,21 +82,12 @@ def generator(func: Callable):
 
 # Logging setup
 logger = logging.getLogger(__name__)
-log_handler = ClickErrHandler()
-log_handler.formatter = ColorFormatter()
-logger.addHandler(log_handler)
+util.logging.basic_config(logger)
 
 
 # Commands
 @click.group(chain=True)
-@click.option(
-    '--verbose/--quiet', '-v/-q',
-    default=True,
-    is_eager=True, expose_value=False,
-    callback=lambda _ctx, _param, value: logger.setLevel(logging.INFO if value
-                                                         else logging.ERROR),
-    help='Set logging verbosity.',
-)
+@util.logging.quiet_option(logger)
 @click.option(
     '--from', '-f', 'source',
     help='Name of a source group (tag, target, ...).'
