@@ -3,19 +3,22 @@ url = "https://pypi.python.org/simple"
 verify_ssl = true
 
 [packages]
+
 click = "*"
 attrs = ">=17"
-PyTrie = "*"
+pytrie = "*"
 requests = "*"
 requests-file = "*"
 toml = "*"
 pyxdg = "*"
-Cerberus = "*"
+cerberus = "*"
+click-log = "*"
 
 [requires]
 python_version = "3.6"
 
 [dev-packages]
+
 pytest = "*"
 pyfakefs = "*"
 betamax = "*"

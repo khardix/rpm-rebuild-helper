@@ -38,6 +38,7 @@ DEPENDENCIES = [
     'attrs>=17',
     'cerberus',
     'click',
+    'click-log',
     'PyTrie',
     'requests',
     'requests-file',
