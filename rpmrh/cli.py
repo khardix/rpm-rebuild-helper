@@ -1,5 +1,6 @@
 """Command Line Interface for the package"""
 
+import logging
 from contextlib import ExitStack
 from functools import reduce, wraps
 from itertools import chain, repeat
@@ -11,10 +12,23 @@ import attr
 import click
 import toml
 from attr.validators import instance_of
+from click_log import ColorFormatter
 from ruamel import yaml
 
 from . import configuration, util
 from .service.abc import Repository
+
+
+class ClickErrHandler(logging.Handler):
+    """Log to stderr using click."""
+
+    def emit(self, record):
+        try:
+            click.echo(self.format(record), err=True)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            self.handleError(record)
 
 
 @attr.s(slots=True, frozen=True)
@@ -79,8 +93,23 @@ def generator(func: Callable):
     return wrapper
 
 
+# Logging setup
+logger = logging.getLogger(__name__)
+log_handler = ClickErrHandler()
+log_handler.formatter = ColorFormatter()
+logger.addHandler(log_handler)
+
+
 # Commands
 @click.group(chain=True)
+@click.option(
+    '--verbose/--quiet', '-v/-q',
+    default=True,
+    is_eager=True, expose_value=False,
+    callback=lambda _ctx, _param, value: logger.setLevel(logging.INFO if value
+                                                         else logging.ERROR),
+    help='Set logging verbosity.',
+)
 @click.option(
     '--from', '-f', 'source',
     help='Name of a source group (tag, target, ...).'
@@ -192,6 +221,7 @@ def diff(params, collection_stream):
 def download(params, collection_stream, output_dir):
     """Download packages into specified directory."""
 
+    log = logger.getChild('download')
     output_dir = Path(output_dir).resolve()
 
     for collection, packages in collection_stream:
@@ -203,6 +233,10 @@ def download(params, collection_stream, output_dir):
 
         collection_dir.mkdir(exist_ok=True)
 
-        paths = map(repo.download, packages, repeat(collection_dir))
+        def logged_download(package):
+            log.info('Fetching {}'.format(package))
+            return repo.download(package, collection_dir)
+
+        paths = map(logged_download, packages)
 
         yield collection, paths
