@@ -8,13 +8,15 @@ from typing import Iterator, TextIO
 
 from xdg.BaseDirectory import load_config_paths
 
+ROOT_PACKAGE = __package__.rpartition('.')[0]
+
 
 def open_resource_files(
     root_dir: str,
     extension: str,
     *,
     encoding: str = 'utf-8',
-    package: str = __package__
+    package: str = ROOT_PACKAGE
 ) -> Iterator[TextIO]:
     """Open package resources text files.
 
