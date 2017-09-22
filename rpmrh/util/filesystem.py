@@ -8,7 +8,7 @@ from typing import Iterator, TextIO
 
 from xdg.BaseDirectory import load_config_paths
 
-ROOT_PACKAGE = __package__.rpartition('.')[0]
+from .. import RESOURCE_ID
 
 
 def open_resource_files(
@@ -16,7 +16,7 @@ def open_resource_files(
     extension: str,
     *,
     encoding: str = 'utf-8',
-    package: str = ROOT_PACKAGE
+    package: str = RESOURCE_ID
 ) -> Iterator[TextIO]:
     """Open package resources text files.
 
@@ -60,7 +60,7 @@ def open_config_files(
         Opened text streams.
     """
 
-    conf_dirs = map(Path, load_config_paths(__package__))
+    conf_dirs = map(Path, load_config_paths(RESOURCE_ID))
     conf_file_paths = chain.from_iterable(
         pth.glob('*{}'.format(extension)) for pth in conf_dirs
     )
