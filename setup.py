@@ -35,15 +35,16 @@ METADATA = {
 }
 
 DEPENDENCIES = [
+    'PyTrie',
     'attrs>=17',
     'cerberus',
     'click',
     'click-log',
-    'PyTrie',
+    'pyxdg',
     'requests',
     'requests-file',
+    'ruamel.yaml<=0.15',
     'toml',
-    'pyxdg',
 ]
 
 TEST_DEPENDENCIES = [  # only for pytest-runner!
