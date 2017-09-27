@@ -13,6 +13,7 @@ class GroupKind(Enum):
     """Enumeration of recognized package groups"""
 
     TAG = ('tag_prefixes', 'tag')
+    TARGET = ('target_prefixes', 'target')
 
     def __init__(self, key_attribute: str, alias_kind: str):
         #: Name of the key attribute for this group
