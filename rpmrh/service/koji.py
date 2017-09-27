@@ -1,6 +1,9 @@
 """Interface to a Koji build service."""
 
+import logging
 import os
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, Mapping, Optional, Set
 
@@ -14,6 +17,8 @@ from ..configuration import service
 from ..util import system_import
 
 koji = system_import('koji')
+
+logger = logging.getLogger(__name__)
 
 
 @attr.s(slots=True, frozen=True)
@@ -70,6 +75,24 @@ class BuiltPackage(rpm.Metadata):
 
         raw_data = service.session.getBuild(attr.asdict(original))
         return cls.from_mapping(raw_data)
+
+
+@attr.s(slots=True, frozen=True)
+class BuildFailure(Exception):
+    """Report failed build."""
+
+    # The package that failed to build
+    package = attr.ib(validator=instance_of(rpm.Metadata))
+    # The reason for failure
+    reason = attr.ib(validator=instance_of(str))
+
+    def __attr_post_init__(self):
+        """Initialize superclass"""
+
+        super().__init__(str(self))
+
+    def __str__(self):
+        return '{s.package!s}: {s.reason}'.format(s=self)
 
 
 @service.register('koji', initializer='from_config_profile')
@@ -206,3 +229,93 @@ class Service(abc.Repository):
                 ostream.write(chunk)
 
         return rpm.LocalPackage.from_path(target_file_path)
+
+    def build(
+        self,
+        target: str,
+        source_package: rpm.LocalPackage,
+        *,
+        poll_interval: int = 5
+    ) -> BuiltPackage:
+        """Build package using the service.
+
+        Keyword arguments:
+            target: Name of the target to build into.
+            source_package: The package to build.
+            poll_interval: Interval (in seconds) of querying the task state
+                when watching.
+
+        Returns:
+            Metadata for a successfully built SRPM package.
+
+        Raises:
+            BuildFailure: Build failure explanation.
+        """
+
+        pkg_label = str(source_package)
+
+        # Upload the package
+        remote_dir = '{timestamp:%Y-%m-%dT%H:%M:%S}-{package!s}'.format(
+            timestamp=datetime.now(timezone.utc),
+            package=source_package,
+        )
+
+        logger.debug('Uploading {pkg} to {remote}'.format(
+            pkg=pkg_label,
+            remote=remote_dir,
+        ))
+
+        self.session.uploadWrapper(source_package.path, remote_dir)
+        remote_package = '/'.join((remote_dir, source_package.path.name))
+
+        # Start the build
+        target_info = self.session.getBuildTarget(target)
+        if target_info is None:
+            raise ValueError('Unknown build target: {}'.format(target))
+
+        logger.debug('Staring build of {pkg}'.format(pkg=pkg_label))
+        build_task_id = self.session.build(remote_package, target_info['name'])
+
+        # Wait for the build to finish
+        def state(task_info):
+            """Extract state information from task"""
+
+            key = task_info.get('state', None)
+            return koji.TASK_STATES.get(key, None)
+
+        def log_state(task_info, old_info={}):
+            """Logs state of a task, if the state was changed"""
+
+            if task_info['state'] == old_info.get('state', None):
+                return
+
+            logger.info('Build task {id} [{package}]: {state}'.format(
+                id=task_info['id'],
+                package=source_package,
+                state=state(task_info),
+            ))
+
+        build_info = self.session.getTaskInfo(build_task_id)
+        log_state(build_info)
+
+        while state(build_info) not in {'CLOSED', 'CANCELED', 'FAILED'}:
+            time.sleep(poll_interval)
+
+            new_info = self.session.getTaskInfo(build_task_id)
+            log_state(new_info, build_info)
+            build_info = new_info
+
+        log_state(build_info)  # report final state
+
+        # Process the final build state
+        if state(build_info) == 'CLOSED':  # Build successful
+            return BuiltPackage.from_mapping(
+                self.session.getBuild(attr.asdict(source_package))
+            )
+        else:
+            try:  # Convert GenericError to BuildFailure
+                self.session.getTaskResult(build_task_id)
+            except koji.GenericError as original:
+                # Take the message up to the first colon
+                reason = original.args[0].split(':', 1)[0]
+                raise BuildFailure(source_package, reason) from None

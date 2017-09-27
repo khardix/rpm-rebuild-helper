@@ -267,3 +267,26 @@ def test_service_download(service, tmpdir, built_package):
     result = service.download(built_package, Path(str(tmpdir)))
 
     assert result == built_package
+
+
+def test_build_reports_nonexistent_target(build_service, new_package):
+    """Nonexistent build target is reported"""
+
+    with pytest.raises(ValueError):
+        build_service.build('nonexistent', new_package)
+
+
+def test_new_package_builds_successfully(build_service, new_package):
+    """Package not present in build service builds successfully"""
+
+    result_package = build_service.build('test', new_package)
+
+    assert result_package
+    assert result_package == new_package
+
+
+def test_existing_package_build_raises(build_service, existing_package):
+    """Already built package raises an exception"""
+
+    with pytest.raises(koji.BuildFailure):
+        build_service.build('test', existing_package)
