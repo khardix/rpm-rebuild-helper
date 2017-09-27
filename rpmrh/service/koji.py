@@ -290,7 +290,7 @@ class Service(abc.Repository, abc.Builder):
 
             logger.info('Build task {id} [{package}]: {state}'.format(
                 id=task_info['id'],
-                package=source_package,
+                package=source_package.nevra,
                 state=state(task_info),
             ))
 
@@ -304,12 +304,14 @@ class Service(abc.Repository, abc.Builder):
             log_state(new_info, build_info)
             build_info = new_info
 
-        log_state(build_info)  # report final state
-
         # Process the final build state
         if state(build_info) == 'CLOSED':  # Build successful
+            request_keys = {
+                k: v for k, v in attr.asdict(source_package).items()
+                if k in {'name', 'version', 'release', 'epoch'}
+            }
             return BuiltPackage.from_mapping(
-                self.session.getBuild(attr.asdict(source_package))
+                self.session.getBuild(request_keys)
             )
         else:
             try:  # Convert GenericError to BuildFailure
