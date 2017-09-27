@@ -16,8 +16,7 @@ from attr.validators import instance_of
 from ruamel import yaml
 
 from . import RESOURCE_ID, configuration, util
-from .service.abc import Repository
-from .service.koji import BuildFailure
+from .service.abc import Repository, Builder, BuildFailure
 
 
 @attr.s(slots=True, frozen=True)
@@ -235,7 +234,7 @@ def build(params, collection_stream):
             'target', params.destination, el=params.el, collection=collection,
         )
         builder = params.service.index['target_prefixes'].find(
-            target, attributes=['build'],
+            target, type=Builder,
         )
 
         def build_and_filter_failures(packages):
