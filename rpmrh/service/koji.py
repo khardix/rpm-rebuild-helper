@@ -77,27 +77,9 @@ class BuiltPackage(rpm.Metadata):
         return cls.from_mapping(raw_data)
 
 
-@attr.s(slots=True, frozen=True)
-class BuildFailure(Exception):
-    """Report failed build."""
-
-    # The package that failed to build
-    package = attr.ib(validator=instance_of(rpm.Metadata))
-    # The reason for failure
-    reason = attr.ib(validator=instance_of(str))
-
-    def __attr_post_init__(self):
-        """Initialize superclass"""
-
-        super().__init__(str(self))
-
-    def __str__(self):
-        return '{s.package!s}: {s.reason}'.format(s=self)
-
-
 @service.register('koji', initializer='from_config_profile')
 @attr.s(slots=True, frozen=True)
-class Service(abc.Repository):
+class Service(abc.Repository, abc.Builder):
     """Interaction session with a Koji build service."""
 
     #: Client configuration for this service
@@ -335,4 +317,4 @@ class Service(abc.Repository):
             except koji.GenericError as original:
                 # Take the message up to the first colon
                 reason = original.args[0].split(':', 1)[0]
-                raise BuildFailure(source_package, reason) from None
+                raise abc.BuildFailure(source_package, reason) from None
