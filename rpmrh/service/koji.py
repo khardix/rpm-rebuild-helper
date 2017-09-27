@@ -285,7 +285,13 @@ class Service(abc.Repository):
             raise ValueError('Unknown build target: {}'.format(target))
 
         logger.debug('Staring build of {pkg}'.format(pkg=pkg_label))
-        build_task_id = self.session.build(remote_package, target_info['name'])
+        build_task_id = self.session.build(
+            remote_package,
+            target_info['name'],
+            opts=dict(
+                scratch=True,
+            ),
+        )
 
         # Wait for the build to finish
         def state(task_info):
