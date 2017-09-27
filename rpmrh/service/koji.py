@@ -84,10 +84,10 @@ class Service(abc.Repository):
     configuration = attr.ib(validator=instance_of(Mapping))
 
     #: XMLRPC session for communication with the service
-    session = attr.ib(validator=instance_of(koji.ClientSession), init=False)
+    session = attr.ib(validator=instance_of(koji.ClientSession))
 
     #: Information about remote URLs and paths
-    path_info = attr.ib(validator=instance_of(koji.PathInfo), init=False)
+    path_info = attr.ib(validator=instance_of(koji.PathInfo))
 
     # Dynamic defaults
 
