@@ -1,6 +1,7 @@
 """Command Line Interface for the package"""
 
 import logging
+from collections import defaultdict
 from contextlib import ExitStack
 from functools import reduce, wraps
 from itertools import chain, repeat
@@ -16,6 +17,7 @@ from ruamel import yaml
 
 from . import RESOURCE_ID, configuration, util
 from .service.abc import Repository
+from .service.koji import BuildFailure
 
 
 @attr.s(slots=True, frozen=True)
@@ -218,3 +220,40 @@ def download(params, collection_stream, output_dir):
         paths = map(logged_download, packages)
 
         yield collection, paths
+
+
+@main.command()
+@processor
+@click.pass_obj
+def build(params, collection_stream):
+    """Attempt to build packages in target."""
+
+    failed = defaultdict(set)
+
+    for collection, packages in collection_stream:
+        target = params.service.unalias(
+            'target', params.destination, el=params.el, collection=collection,
+        )
+        builder = params.service.index['target_prefixes'].find(
+            target, attributes=['build'],
+        )
+
+        def build_and_filter_failures(packages):
+            with builder:
+                for pkg in packages:
+                    try:
+                        yield builder.build(target, pkg)
+                    except BuildFailure as failure:
+                        failed[collection].add(failure)
+
+        yield collection, build_and_filter_failures(packages)
+
+    click.secho('Build Failures'.center(80), err=True, fg='red', bold=True)
+    readable_failures = {
+        scl: [
+            '{f.package.nvr}: {f.reason}'.format(f=fail)
+            for fail in sorted(failures, key=lambda f: f.package)
+        ]
+        for scl, failures in failed.items()
+    }
+    yaml.safe_dump(readable_failures, stream=click.get_text_stream('stderr'))
