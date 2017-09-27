@@ -100,9 +100,6 @@ class BuildFailure(Exception):
 class Service(abc.Repository):
     """Interaction session with a Koji build service."""
 
-    #: Tag prefixes associated with this Koji instance
-    tag_prefixes = attr.ib(validator=instance_of(Set), convert=set)
-
     #: Client configuration for this service
     configuration = attr.ib(validator=instance_of(Mapping))
 
@@ -111,6 +108,20 @@ class Service(abc.Repository):
 
     #: Information about remote URLs and paths
     path_info = attr.ib(validator=instance_of(koji.PathInfo))
+
+    #: Tag prefixes associated with this Koji instance
+    tag_prefixes = attr.ib(
+        validator=instance_of(Set),
+        convert=set,
+        default=attr.Factory(set),
+    )
+
+    #: Target prefixes associated with this koji instance
+    target_prefixes = attr.ib(
+        validator=instance_of(Set),
+        convert=set,
+        default=attr.Factory(set),
+    )
 
     # Dynamic defaults
 
