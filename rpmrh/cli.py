@@ -14,7 +14,7 @@ import toml
 from attr.validators import instance_of
 from ruamel import yaml
 
-from . import configuration, util
+from . import RESOURCE_ID, configuration, util
 from .service.abc import Repository
 
 
@@ -81,7 +81,7 @@ def generator(func: Callable):
 
 
 # Logging setup
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(RESOURCE_ID)
 util.logging.basic_config(logger)
 
 
