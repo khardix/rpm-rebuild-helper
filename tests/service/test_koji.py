@@ -9,6 +9,7 @@ import pytest
 
 from rpmrh import rpm
 from rpmrh.service import koji
+from rpmrh.service.abc import BuildFailure
 
 
 class MockBuilder:
@@ -51,7 +52,7 @@ class MockBuilder:
         else:
             return None
 
-    def build(self, package_path, target_name):
+    def build(self, package_path, target_name, **_kwargs):
         """Return ID of successful or failed build, depending on package_path
         """
 
@@ -288,5 +289,5 @@ def test_new_package_builds_successfully(build_service, new_package):
 def test_existing_package_build_raises(build_service, existing_package):
     """Already built package raises an exception"""
 
-    with pytest.raises(koji.BuildFailure):
+    with pytest.raises(BuildFailure):
         build_service.build('test', existing_package)
