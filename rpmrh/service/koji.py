@@ -223,6 +223,133 @@ class Service(abc.Repository, abc.Builder):
 
         return rpm.LocalPackage.from_path(target_file_path)
 
+    def __query_target(self, target_name: str) -> dict:
+        """Queries the service for information on a target.
+
+        Keyword arguments:
+            target_name: The name of the target to query.
+
+        Returns:
+            A dictionary with provided target information.
+
+        Raises:
+            ValueError: The requested target is not known to the service.
+        """
+
+        info = self.session.getBuildTarget(target_name)
+
+        if info is not None:
+            return info
+        else:
+            message = (
+                'Build target "{target_name}" '
+                'is not handled by this service.'
+            ).format(target_name=target_name)
+            raise ValueError(message)
+
+    def __upload_srpm(self, source_package: rpm.LocalPackage) -> str:
+        """Upload a local SRPM to automatically determined remote directory.
+
+        Keyword arguments:
+            source_package: The SRPM to upload.
+
+        Returns:
+            Remote path to the uploaded package.
+        """
+
+        remote_dir = '{timestamp:%Y-%m-%dT%H:%M:%S}-{package.nevra}'.format(
+            timestamp=datetime.now(timezone.utc),
+            package=source_package,
+        )
+
+        logger.debug('Uploading {package.path} to {remote_dir}'.format(
+            package=source_package,
+            remote_dir=remote_dir,
+        ))
+        self.session.uploadWrapper(source_package.path, remote_dir)
+
+        return '/'.join((remote_dir, source_package.path.name))
+
+    def __queue_build(self, target: Mapping, remote_package_path: str) -> int:
+        """Queue a build task of remote_package_path into target_name.
+
+        Keyword arguments:
+            target: The target information mapping.
+            remote_package_path: The path to the SRPM to build.
+
+        Returns:
+            Numeric task ID for the queued build.
+        """
+
+        logger.debug(
+            'Starting build of {remote_package} to {target[name]}'.format(
+                remote_package=remote_package_path.rpartition('/')[-1],
+                target=target,
+            )
+        )
+
+        #: TODO: turn into option
+        extra_options = {'scratch': True}
+
+        return self.session.build(
+            remote_package_path,
+            target['name'],
+            opts=extra_options,
+        )
+
+    def __watch_task(
+        self,
+        task_id: int,
+        poll_interval: int,
+        *,
+        built_package: Optional[rpm.Metadata] = None
+    ) -> int:
+        """Watch a task until its end.
+
+        Keyword arguments:
+            task_id: Numeric identification of the task to watch.
+            poll_interval: Interval (in seconds) of task state queries.
+            built_package: Metadata of the package being built
+                (for more informative log messages).
+
+        Returns:
+            A numeric identification of final task state (koji.TASK_STATES).
+        """
+
+        def name_state(task_info: Mapping) -> Optional[int]:
+            """Extract the name of the state from the task info, if present."""
+
+            state_number = task_info.get('state', None)
+            return koji.TASK_STATES.get(state_number, None)
+
+        def log_state(task_info: Mapping) -> None:
+            """Log current task state."""
+
+            message = 'Build task {id} [{nevra}]: {state_name}'.format(
+                id=task_info['id'],
+                nevra=built_package.nevra if built_package else 'unknown',
+                state_name=name_state(task_info),
+            )
+
+            logger.info(message)
+
+        END_STATE_SET = {'CLOSED', 'CANCELED', 'FAILED'}
+
+        task_info = self.session.getTaskInfo(task_id)
+        log_state(task_info)
+
+        # Wait until finished, log any detected state changes
+        while name_state(task_info) not in END_STATE_SET:
+            time.sleep(poll_interval)
+
+            new_info = self.session.getTaskInfo(task_id)
+            if new_info['state'] != task_info['state']:
+                log_state(new_info)
+
+            task_info = new_info
+
+        return task_info['state']
+
     def build(
         self,
         target: str,
@@ -242,81 +369,31 @@ class Service(abc.Repository, abc.Builder):
             Metadata for a successfully built SRPM package.
 
         Raises:
+            ValueError: Unknown target.
             BuildFailure: Build failure explanation.
         """
 
-        pkg_label = str(source_package)
-
-        # Upload the package
-        remote_dir = '{timestamp:%Y-%m-%dT%H:%M:%S}-{package!s}'.format(
-            timestamp=datetime.now(timezone.utc),
-            package=source_package,
+        target = self.__query_target(target)  # raises on unknown target
+        remote_package = self.__upload_srpm(source_package)
+        build_task_id = self.__queue_build(target, remote_package)
+        result = self.__watch_task(
+            build_task_id,
+            poll_interval=poll_interval,
+            built_package=source_package,
         )
+        success = result == koji.TASK_STATES['CLOSED']
 
-        logger.debug('Uploading {pkg} to {remote}'.format(
-            pkg=pkg_label,
-            remote=remote_dir,
-        ))
-
-        self.session.uploadWrapper(source_package.path, remote_dir)
-        remote_package = '/'.join((remote_dir, source_package.path.name))
-
-        # Start the build
-        target_info = self.session.getBuildTarget(target)
-        if target_info is None:
-            raise ValueError('Unknown build target: {}'.format(target))
-
-        logger.debug('Staring build of {pkg}'.format(pkg=pkg_label))
-        build_task_id = self.session.build(
-            remote_package,
-            target_info['name'],
-            opts=dict(
-                scratch=True,
-            ),
-        )
-
-        # Wait for the build to finish
-        def state(task_info):
-            """Extract state information from task"""
-
-            key = task_info.get('state', None)
-            return koji.TASK_STATES.get(key, None)
-
-        def log_state(task_info, old_info={}):
-            """Logs state of a task, if the state was changed"""
-
-            if task_info['state'] == old_info.get('state', None):
-                return
-
-            logger.info('Build task {id} [{package}]: {state}'.format(
-                id=task_info['id'],
-                package=source_package.nevra,
-                state=state(task_info),
-            ))
-
-        build_info = self.session.getTaskInfo(build_task_id)
-        log_state(build_info)
-
-        while state(build_info) not in {'CLOSED', 'CANCELED', 'FAILED'}:
-            time.sleep(poll_interval)
-
-            new_info = self.session.getTaskInfo(build_task_id)
-            log_state(new_info, build_info)
-            build_info = new_info
-
-        # Process the final build state
-        if state(build_info) == 'CLOSED':  # Build successful
-            request_keys = {
-                k: v for k, v in attr.asdict(source_package).items()
-                if k in {'name', 'version', 'release', 'epoch'}
+        if success:
+            build_params = {
+                key: getattr(source_package, key)
+                for key in ('name', 'version', 'release', 'epoch')
             }
-            return BuiltPackage.from_mapping(
-                self.session.getBuild(request_keys)
-            )
+            built_metadata = self.session.getBuild(build_params, strict=True)
+            return BuiltPackage.from_mapping(built_metadata)
+
         else:
-            try:  # Convert GenericError to BuildFailure
-                self.session.getTaskResult(build_task_id)
-            except koji.GenericError as original:
-                # Take the message up to the first colon
-                reason = original.args[0].split(':', 1)[0]
+            try:
+                self.session.getTaskResult(build_task_id)  # always raise
+            except koji.GenericError as original:  # extract the reason
+                reason = original.args[0].partition(':')[0]  # up to first :
                 raise abc.BuildFailure(source_package, reason) from None

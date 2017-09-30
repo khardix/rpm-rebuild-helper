@@ -68,7 +68,7 @@ class MockBuilder:
     def getTaskInfo(self, task_id):
         return self.tasks[task_id]
 
-    def getBuild(self, build_map):
+    def getBuild(self, build_map, **_kwargs):
         build_map.setdefault('id', hash('OK'))
         return build_map
 
