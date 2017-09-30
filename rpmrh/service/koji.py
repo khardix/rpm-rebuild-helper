@@ -10,6 +10,7 @@ from typing import Iterator, Mapping, Optional, Set
 import attr
 import requests
 from attr.validators import instance_of
+from click import style
 
 from . import abc
 from .. import rpm
@@ -325,13 +326,24 @@ class Service(abc.Repository, abc.Builder):
         def log_state(task_info: Mapping) -> None:
             """Log current task state."""
 
+            COLORS = {
+                'FREE': dict(fg='cyan'),
+                'OPEN': dict(fg='yellow'),
+                'CLOSED': dict(fg='green'),
+                'CANCELED': dict(fg='yellow', bold=True),
+                'ASSIGNED': dict(fg='magenta'),
+                'FAILED': dict(fg='red', bold=True),
+            }
+
+            state_name = name_state(task_info)
+
             message = 'Build task {id} [{nevra}]: {state_name}'.format(
                 id=task_info['id'],
                 nevra=built_package.nevra if built_package else 'unknown',
-                state_name=name_state(task_info),
+                state_name=state_name,
             )
 
-            logger.info(message)
+            logger.info(style(message, **COLORS[state_name]))
 
         END_STATE_SET = {'CLOSED', 'CANCELED', 'FAILED'}
 
