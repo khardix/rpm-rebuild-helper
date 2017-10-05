@@ -22,7 +22,7 @@ koji = system_import('koji')
 logger = logging.getLogger(__name__)
 
 
-@attr.s(slots=True, frozen=True)
+@attr.s(slots=True, frozen=True, cmp=False)
 class BuiltPackage(rpm.Metadata):
     """Data for a built RPM package presented by a Koji service.
 
