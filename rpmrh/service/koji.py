@@ -4,6 +4,8 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+from itertools import groupby
+from operator import attrgetter
 from pathlib import Path
 from typing import Iterator, Mapping, Optional, Set
 
@@ -166,8 +168,12 @@ class Service(abc.Repository, abc.Builder):
             Metadata for the latest builds in the specified tag.
         """
 
-        build_list = self.session.listTagged(tag_name, latest=True)
-        yield from map(BuiltPackage.from_mapping, build_list)
+        build_list = self.session.listTagged(tag_name)
+        build_list = map(BuiltPackage.from_mapping, build_list)
+        build_groups = groupby(sorted(build_list), key=attrgetter('name'))
+
+        for _name, group in build_groups:
+            yield max(group)
 
     # Tasks
 
