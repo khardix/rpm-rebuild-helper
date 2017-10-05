@@ -1,11 +1,14 @@
 """Test communication with a koji build service"""
 
 from configparser import ConfigParser
-from textwrap import dedent
+from itertools import groupby
+from operator import attrgetter
 from pathlib import Path
+from textwrap import dedent
 
 import attr
 import pytest
+from ruamel import yaml
 
 from rpmrh import rpm
 from rpmrh.service import koji
@@ -260,6 +263,42 @@ def test_service_latest_builds(service, tag_name, expected_nvr_set):
     results = {build.nvr for build in service.latest_builds(tag_name)}
 
     assert results == expected_nvr_set
+
+
+@pytest.mark.parametrize('tag_name', [
+    # The error found in these tags
+    'sclo7-rh-nodejs4-rh-candidate',
+    'sclo7-rh-perl524-rh-candidate',
+])
+def test_latest_builds_are_not_obsoletes(service, tag_name):
+    """Latest builds do not report obsolete packages.
+
+    koji.ClientSession.latest_builds apparently orders the builds by time,
+    not by NVR.
+    """
+
+    def obsolete(package, existing_map):
+        return (
+            package.name in existing_map
+            and existing_map[package.name] > package
+        )
+
+    existing_raw = service.session.listTagged(tag_name)
+    existing = map(koji.BuiltPackage.from_mapping, existing_raw)
+    existing = groupby(sorted(existing), key=attrgetter('name'))
+    existing = {k: max(g) for k, g in existing}
+
+    latest = list(service.latest_builds(tag_name))
+
+    obsoletes = [
+        {
+            'existing': existing[pkg.name].nevra,
+            'latest': pkg.nevra,
+        }
+        for pkg in latest if obsolete(pkg, existing)
+    ]
+
+    assert not obsoletes, '\n' + yaml.dump(obsoletes, default_flow_style=False)
 
 
 def test_service_download(service, tmpdir, built_package):
