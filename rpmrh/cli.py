@@ -1,11 +1,11 @@
 """Command Line Interface for the package"""
 
 import logging
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from contextlib import ExitStack
 from functools import reduce, wraps
 from itertools import chain, repeat
-from operator import itemgetter
+from operator import itemgetter, attrgetter
 from pathlib import Path
 from typing import Callable, Iterator
 
@@ -138,8 +138,13 @@ def run_chain(context, processor_seq, collection_seq, **_config_options):
     # Output the results in YAML format
     stdout = click.get_text_stream('stdout', encoding='utf-8')
     for collection, packages in pipeline:
+        packages = sorted(packages)
+
+        if not packages:
+            continue
+
         yaml.dump(
-            {collection: sorted(map(str, packages))},
+            {collection: [str(pkg) for pkg in packages]},
             stream=stdout,
             default_flow_style=False,
         )
@@ -222,9 +227,14 @@ def download(params, collection_stream, output_dir):
 
 
 @main.command()
+@click.option(
+    '--failed', '-f', 'fail_file',
+    type=click.File(mode='w', encoding='utf-8', lazy=True),
+    help='Path to store build failures to [default: stderr].',
+)
 @processor
 @click.pass_obj
-def build(params, collection_stream):
+def build(params, collection_stream, fail_file):
     """Attempt to build packages in target."""
 
     failed = defaultdict(set)
@@ -247,12 +257,18 @@ def build(params, collection_stream):
 
         yield collection, build_and_filter_failures(packages)
 
-    click.secho('Build Failures'.center(80), err=True, fg='red', bold=True)
+    if not failed:
+        raise StopIteration()
+
+    # Convert the stored exceptions to readable representation
     readable_failures = {
-        scl: [
-            '{f.package.nvr}: {f.reason}'.format(f=fail)
-            for fail in sorted(failures, key=lambda f: f.package)
-        ]
-        for scl, failures in failed.items()
+        scl: OrderedDict(
+            (f.package.nevra, f.reason)
+            for f in sorted(fails, key=attrgetter('package'))
+        ) for scl, fails in failed.items()
     }
-    yaml.safe_dump(readable_failures, stream=click.get_text_stream('stderr'))
+
+    if fail_file is None:
+        fail_file = click.get_text_stream('stderr', encoding='utf-8')
+
+    yaml.dump(readable_failures, stream=fail_file, default_flow_style=False)
