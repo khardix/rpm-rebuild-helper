@@ -4,10 +4,77 @@ from configparser import ConfigParser
 from textwrap import dedent
 from pathlib import Path
 
+import attr
 import pytest
 
 from rpmrh import rpm
 from rpmrh.service import koji
+from rpmrh.service.abc import BuildFailure
+
+
+class MockBuilder:
+    """Mock implementations of koji functionality."""
+
+    #: Valid targets
+    targets = {'test'}
+
+    #: Existing packages
+    packages = {
+        'test': {
+            rpm.Metadata(
+                name='test',
+                version='1.0',
+                release='1.test',
+                arch='src',
+            ),
+        },
+    }
+
+    #: Prepared task results
+    tasks = {
+        hash('OK'): {
+            'id': hash('OK'),
+            'state': koji.koji.TASK_STATES['CLOSED'],
+        },
+        hash('FAIL'): {
+            'id': hash('FAIL'),
+            'state': koji.koji.TASK_STATES['FAILED'],
+        },
+    }
+
+    def uploadWrapper(_self, _remote, _package, **_kwargs):
+        """No return value -- skip"""
+        pass
+
+    def getBuildTarget(self, name):
+        if name in self.targets:
+            return {'name': name}
+        else:
+            return None
+
+    def build(self, package_path, target_name, **_kwargs):
+        """Return ID of successful or failed build, depending on package_path
+        """
+
+        assert target_name in self.targets
+
+        existing_names = map(str, self.packages[target_name])
+        already_built = any(n in package_path for n in existing_names)
+        if already_built:
+            return hash('FAIL')
+        else:
+            return hash('OK')
+
+    def getTaskInfo(self, task_id):
+        return self.tasks[task_id]
+
+    def getBuild(self, build_map, **_kwargs):
+        build_map.setdefault('id', hash('OK'))
+        return build_map
+
+    def getTaskResult(self, task_id):
+        assert task_id == hash('FAIL')
+        raise koji.koji.GenericError('Already built')
 
 
 @pytest.fixture
@@ -85,6 +152,42 @@ def service(configuration_profile, betamax_parametrized_session):
     service.session.rsession = betamax_parametrized_session
 
     return service
+
+
+@pytest.fixture
+def build_service(service):
+    """Service with mocked session for build testing"""
+
+    attr.set_run_validators(False)
+    build_service = attr.evolve(service, session=MockBuilder())
+    attr.set_run_validators(True)
+
+    return build_service
+
+
+@pytest.fixture
+def new_package(minimal_srpm_path):
+    """Package not yet built in the service."""
+
+    return rpm.LocalPackage.from_path(minimal_srpm_path)
+
+
+@pytest.fixture
+def existing_package(new_package):
+    """Package already existing in build service."""
+
+    desired = next(iter(MockBuilder.packages['test']))
+    desired_path = new_package.path.with_name('{.nevra}.rpm'.format(desired))
+
+    desired_path.touch()
+
+    yield attr.evolve(
+        new_package,
+        **attr.asdict(desired),
+        path=desired_path,
+    )
+
+    desired_path.unlink()
 
 
 def test_built_package_from_mapping():
@@ -165,3 +268,26 @@ def test_service_download(service, tmpdir, built_package):
     result = service.download(built_package, Path(str(tmpdir)))
 
     assert result == built_package
+
+
+def test_build_reports_nonexistent_target(build_service, new_package):
+    """Nonexistent build target is reported"""
+
+    with pytest.raises(ValueError):
+        build_service.build('nonexistent', new_package)
+
+
+def test_new_package_builds_successfully(build_service, new_package):
+    """Package not present in build service builds successfully"""
+
+    result_package = build_service.build('test', new_package)
+
+    assert result_package
+    assert result_package == new_package
+
+
+def test_existing_package_build_raises(build_service, existing_package):
+    """Already built package raises an exception"""
+
+    with pytest.raises(BuildFailure):
+        build_service.build('test', existing_package)
