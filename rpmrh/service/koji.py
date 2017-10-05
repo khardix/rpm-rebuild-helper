@@ -289,13 +289,9 @@ class Service(abc.Repository, abc.Builder):
             )
         )
 
-        #: TODO: turn into option
-        extra_options = {'scratch': True}
-
         return self.session.build(
             remote_package_path,
             target['name'],
-            opts=extra_options,
         )
 
     def __watch_task(
