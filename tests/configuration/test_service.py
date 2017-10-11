@@ -11,7 +11,7 @@ from rpmrh.configuration import service
 def service_index():
     """Empty service index"""
 
-    return service.Index()
+    return service.Index(by='tag_prefixes')
 
 
 @pytest.fixture
@@ -26,8 +26,7 @@ def filled_service_index(service_type, service_index):
     instances = (service_type(**conf) for conf in configurations)
 
     for instance in instances:
-        for key in instance.tag_prefixes:
-            service_index[key] = instance
+        service_index.insert(instance)
 
     return service_index
 
@@ -37,8 +36,8 @@ def service_index_group():
     """Group of empty service indexes"""
 
     return service.IndexGroup(
-        tag_prefixes=service.Index(),
-        other_prefixes=service.Index(),
+        tag_prefixes=service.Index(by='tag_prefixes'),
+        other_prefixes=service.Index(by='other_prefixes'),
     )
 
 
@@ -46,14 +45,9 @@ def service_index_group():
 def filled_index_group(service_index_group, filled_service_index):
     """Group with non-empty indexes"""
 
-    key_attribute = 'tag_prefixes'
-
-    empty_index = service_index_group.pop(key_attribute)
-    service_index_group[key_attribute] = filled_service_index
-
-    yield service_index_group
-
-    service_index_group[key_attribute] = empty_index
+    return service.IndexGroup(
+        tag_prefixes=filled_service_index,
+    )
 
 
 @pytest.fixture

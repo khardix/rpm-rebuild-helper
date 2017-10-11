@@ -6,14 +6,14 @@ from the application configuration files.
 
 from functools import reduce
 from itertools import product
-from typing import Mapping, Callable, Tuple, MutableMapping
+from typing import Mapping, Callable, Tuple, MutableMapping, Hashable
 from typing import Set, Sequence, Container
 from typing import Optional, Type, Any, Union, Iterable
 
 import attr
 import cerberus
 from attr.validators import instance_of
-from pytrie import StringTrie
+from pytrie import StringTrie, Trie
 
 from .validation import SCHEMA, GroupKind, validate_raw, merge_raw
 
@@ -85,8 +85,47 @@ def instantiate(
     return registry[type_name](**service_conf_map)
 
 
-class Index(StringTrie):
+@attr.s(slots=True, frozen=True)
+class Index(Mapping):
     """Mapping of group name prefix to matching service instance"""
+
+    #: The name of an indexed object's attribute
+    #: which reports the keys to index said object by.
+    #:
+    #: For example, specify `tag_prefixes`
+    #: to index all inserted objects
+    #: by all values
+    #: in their respective `tag_prefixes` attributes.
+    by = attr.ib(validator=instance_of(str))
+
+    #: The container to store the indexed objects in.
+    container = attr.ib(
+        default=attr.Factory(StringTrie),
+        validator=instance_of(Trie),
+        hash=False,
+    )
+
+    def insert(self, candidate: Any, strict: bool = False):
+        """Inserts a candidate to appropriate slots.
+
+        Keyword arguments:
+            candidate: The object to insert.
+                The object will be accessible by all keys
+                reported by attribute with name equal to self.by.
+            strict: Whether to raise an AttributeError
+                on attempt to insert an object without the right attribute.
+
+        Raises:
+            AttributeError: Strict is True and incompatible object should be
+                inserted.
+        """
+
+        if strict:
+            keys = getattr(candidate, self.by)
+        else:
+            keys = getattr(candidate, self.by, frozenset())
+
+        self.container.update((k, candidate) for k in keys)
 
     def find(
         self,
@@ -111,7 +150,7 @@ class Index(StringTrie):
         """
 
         # Start from longest prefix
-        candidates = reversed(list(self.iter_prefix_values(prefix)))
+        candidates = reversed(list(self.container.iter_prefix_values(prefix)))
 
         if type is not None:
             candidates = filter(lambda c: isinstance(c, type), candidates)
@@ -126,6 +165,17 @@ class Index(StringTrie):
         except StopIteration:  # convert to appropriate exception type
             message = 'No value with given criteria for {}'.format(prefix)
             raise KeyError(message) from None
+
+    # Mapping interface
+
+    def __getitem__(self, key: Hashable):
+        return self.container[key]
+
+    def __iter__(self):
+        return iter(self.container)
+
+    def __len__(self):
+        return len(self.container)
 
 
 class IndexGroup(dict):
@@ -162,9 +212,8 @@ class IndexGroup(dict):
             The sequence passed as parameter.
         """
 
-        for attribute_name, service in product(self.keys(), service_seq):
-            for prefix in getattr(service, attribute_name, frozenset()):
-                self[attribute_name][prefix] = service
+        for index, service in product(self.values(), service_seq):
+            index.insert(service)
 
         return service_seq
 
@@ -201,7 +250,7 @@ class InstanceRegistry:
 
         attributes = {
             'index': IndexGroup(
-                (g.key_attribute, Index()) for g in GroupKind
+                (g.key_attribute, Index(by=g.key_attribute)) for g in GroupKind
             ),
             'alias': valid['alias'],
         }
