@@ -105,8 +105,13 @@ util.logging.basic_config(logger)
     '--collection', '-c', 'collection_seq', multiple=True,
     help='Name of the SCL to work with (can be used multiple times).'
 )
+@click.option(
+    '--report', type=click.File(mode='w', encoding='utf-8'),
+    default='-',
+    help='File name of the final report [default: stdout].',
+)
 @click.pass_context
-def main(context, collection_seq, **config_options):
+def main(context, collection_seq, report, **config_options):
     """RPM Rebuild Helper – an automation tool for mass RPM rebuilding,
     with focus on Software Collections.
     """
@@ -117,12 +122,19 @@ def main(context, collection_seq, **config_options):
 
 @main.resultcallback()
 @click.pass_context
-def run_chain(context, processor_seq, collection_seq, **_config_options):
+def run_chain(
+    context,
+    processor_seq,
+    collection_seq,
+    report,
+    **_config_options,
+):
     """Run a sequence of collections through a processor sequence.
 
     Keyword arguments:
         processor_seq: The callables to apply to the collection sequence.
         collection_seq: The sequence of SCL names to be processed.
+        report: The file to write the result report into.
     """
 
     # TODO: Start with latest packages from each collection
@@ -136,7 +148,6 @@ def run_chain(context, processor_seq, collection_seq, **_config_options):
     )
 
     # Output the results in YAML format
-    stdout = click.get_text_stream('stdout', encoding='utf-8')
     for collection, packages in pipeline:
         packages = sorted(packages)
 
@@ -145,7 +156,7 @@ def run_chain(context, processor_seq, collection_seq, **_config_options):
 
         yaml.dump(
             {collection: [str(pkg) for pkg in packages]},
-            stream=stdout,
+            stream=report,
             default_flow_style=False,
         )
 
