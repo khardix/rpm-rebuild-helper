@@ -1,6 +1,8 @@
 """Tests for the service configuration mechanism"""
 
+from collections import namedtuple
 from functools import reduce
+from itertools import starmap
 
 import pytest
 
@@ -32,31 +34,29 @@ def filled_service_index(service_type, service_index):
 
 
 @pytest.fixture
-def service_index_group():
-    """Group of empty service indexes"""
-
-    return service.IndexGroup(
-        tag_prefixes=service.Index(by='tag_prefixes'),
-        other_prefixes=service.Index(by='other_prefixes'),
-    )
-
-
-@pytest.fixture
-def filled_index_group(service_index_group, filled_service_index):
-    """Group with non-empty indexes"""
-
-    return service.IndexGroup(
-        tag_prefixes=filled_service_index,
-    )
-
-
-@pytest.fixture
 def instance_registry(valid_configuration, filled_initializer_registry):
-    """Configured InstanceRegistry"""
+    """Configured service.Registry"""
 
-    return service.InstanceRegistry.from_raw(
-        valid_configuration, service_registry=filled_initializer_registry,
+    return service.Registry.from_raw(
+        valid_configuration,
+        init_registry=filled_initializer_registry,
+        known_kinds=list(starmap(
+            namedtuple('TestKind', ('alias_kind', 'key_attribute')),
+            [('tag', 'tag_prefixes'), ('other', 'other_prefixes')],
+        )),
     )
+
+
+@pytest.fixture
+def filled_instance_registry(instance_registry, filled_service_index):
+    """service.Registry with pre-filled service index."""
+
+    old_index = instance_registry.index.pop('tag')
+    instance_registry.index['tag'] = filled_service_index
+
+    yield instance_registry
+
+    instance_registry.index['tag'] = old_index
 
 
 def test_register_simple(service_type, initializer_registry):
@@ -194,8 +194,8 @@ def test_index_find_filters_by_attributes(
         assert all(hasattr(instance, a) for a in attributes)
 
 
-def test_index_group_sorts_correctly(
-    service_type, other_type, unknown_type, service_index_group
+def test_registry_sorts_correctly(
+    service_type, other_type, unknown_type, instance_registry
 ):
     """IndexGroup sorts the services properly."""
 
@@ -204,25 +204,27 @@ def test_index_group_sorts_correctly(
         for cls in (service_type, other_type, unknown_type)
     )
 
-    test_sequence = service_index_group.distribute(service, other, unknown)
+    test_sequence = list(
+        instance_registry.distribute((service, other, unknown))
+    )
 
     assert len(test_sequence) == 3
 
     assert all(
         val is service
-        for val in service_index_group['tag_prefixes'].values()
+        for val in instance_registry.index['tag'].values()
     )
     assert all(
         val is other
-        for val in service_index_group['other_prefixes'].values()
+        for val in instance_registry.index['other'].values()
     )
-    assert all(val is not unknown for val in service_index_group.all_services)
+    assert all(val is not unknown for val in instance_registry.all_services)
 
 
-def test_index_group_reports_unique_services(filled_index_group):
+def test_index_group_reports_unique_services(filled_instance_registry):
     """IndexGroup reports all unique indexed services."""
 
-    indexed = filled_index_group.all_services
+    indexed = filled_instance_registry.all_services
 
     assert len(indexed) == 2
 
@@ -234,11 +236,11 @@ def test_instance_registry_is_created_from_sigle_mapping(
     configured_service,
     instance_registry
 ):
-    """InstanceRegistry can be created from a single mapping."""
+    """service.Registry can be created from a single mapping."""
 
     assert instance_registry
     assert all(
-        prefix in instance_registry.index['tag_prefixes']
+        prefix in instance_registry.index['tag']
         for prefix in configured_service.tag_prefixes
     )
     assert instance_registry.alias['tag']['test'] == 'test-tag-{extra}'
@@ -248,17 +250,17 @@ def test_context_is_created_from_multiple_mappings(
     valid_configuration_seq,
     filled_initializer_registry
 ):
-    """InstanceRegistry can be created from multiple mappings."""
+    """service.Registry can be created from multiple mappings."""
 
-    instance_registry = service.InstanceRegistry.from_merged(
+    instance_registry = service.Registry.from_merged(
         *valid_configuration_seq,
-        service_registry=filled_initializer_registry,
+        init_registry=filled_initializer_registry,
     )
 
     assert instance_registry
-    assert len(instance_registry.index['tag_prefixes']) == 2
+    assert len(instance_registry.index['tag']) == 2
     assert all(
-        tag in instance_registry.index['tag_prefixes']
+        tag in instance_registry.index['tag']
         for tag in {'test', 'extra'}
     )
     assert instance_registry.alias['tag']['test'] == 'test-tag-{extra}'
@@ -267,7 +269,9 @@ def test_context_is_created_from_multiple_mappings(
 def test_context_expand_existing_alias(instance_registry):
     """Context can expand existing alias."""
 
-    full_name = instance_registry.unalias('tag', 'test', extra='world')
+    full_name = instance_registry.unalias('tag', 'test', {
+        'extra': 'world',
+    })
 
     assert full_name == 'test-tag-world'
 
@@ -278,7 +282,9 @@ def test_context_format_missing_alias(instance_registry):
     full_name = instance_registry.unalias(
         'tag',
         'no-{name}',
-        name='tomorrow',
+        {
+            'name': 'tomorrow',
+        },
     )
 
     assert full_name == 'no-tomorrow'
