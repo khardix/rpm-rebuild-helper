@@ -20,7 +20,7 @@ from .service.abc import Repository, Builder, BuildFailure
 
 
 @attr.s(slots=True, frozen=True)
-class Parameters:
+class RunParameters:
     """Global run parameters (CLI options, etc.)"""
 
     #: Source group name
@@ -31,7 +31,7 @@ class Parameters:
     el = attr.ib(validator=instance_of(int))
 
     #: Configured and indexed service instances
-    service = attr.ib(validator=instance_of(configuration.InstanceRegistry))
+    service = attr.ib(validator=instance_of(configuration.service.Registry))
 
     @service.default
     def load_user_and_bundled_services(_self):
@@ -51,7 +51,7 @@ class Parameters:
             streams = map(opened.enter_context, streams)
             contents = map(toml.load, streams)
 
-            return configuration.InstanceRegistry.from_merged(*contents)
+            return configuration.service.Registry.from_merged(*contents)
 
 
 # Command decorators
@@ -111,13 +111,16 @@ util.logging.basic_config(logger)
     help='File name of the final report [default: stdout].',
 )
 @click.pass_context
-def main(context, collection_seq, report, **config_options):
+def main(context, **options):
     """RPM Rebuild Helper – an automation tool for mass RPM rebuilding,
     with focus on Software Collections.
     """
 
     # Store configuration
-    context.obj = Parameters(**config_options)
+    config_fields = {field.name for field in attr.fields(RunParameters)}
+    context.obj = RunParameters(**{
+        k: v for k, v in options.items() if k in config_fields
+    })
 
 
 @main.resultcallback()
@@ -171,14 +174,11 @@ def diff(params, collection_stream):
         def latest_builds(group):
             """Fetch latest builds from a group."""
 
-            tag = params.service.unalias(
-                'tag', group,
-                el=params.el,
-                collection=collection
-            )
-            repo = params.service.index['tag_prefixes'].find(
-                tag, type=Repository
-            )
+            tag = params.service.unalias('tag', group, {
+                'el': params.el,
+                'collection': collection,
+            })
+            repo = params.service.find('tag', tag, type=Repository)
 
             yield from repo.latest_builds(tag)
 
@@ -220,10 +220,11 @@ def download(params, collection_stream, output_dir):
     output_dir = Path(output_dir).resolve()
 
     for collection, packages in collection_stream:
-        tag = params.service.unalias(
-            'tag', params.source, el=params.el, collection=collection,
-        )
-        repo = params.service.index['tag_prefixes'].find(tag, type=Repository)
+        tag = params.service.unalias('tag', params.source, {
+            'el': params.el,
+            'collection': collection,
+        })
+        repo = params.service.find('tag', tag, type=Repository)
         collection_dir = output_dir / collection
 
         collection_dir.mkdir(exist_ok=True)
@@ -251,12 +252,11 @@ def build(params, collection_stream, fail_file):
     failed = defaultdict(set)
 
     for collection, packages in collection_stream:
-        target = params.service.unalias(
-            'target', params.destination, el=params.el, collection=collection,
-        )
-        builder = params.service.index['target_prefixes'].find(
-            target, type=Builder,
-        )
+        target = params.service.unalias('target', params.destination, {
+            'el': params.el,
+            'collection': collection,
+        })
+        builder = params.service.find('target', target, type=Builder)
 
         def build_and_filter_failures(packages):
             with builder:

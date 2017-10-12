@@ -4,18 +4,19 @@ The registered callables will be used to construct relevant instances
 from the application configuration files.
 """
 
-from functools import reduce
-from itertools import product
-from typing import Mapping, Callable, Tuple, MutableMapping
+from functools import reduce, partial
+from types import MappingProxyType
+from typing import Mapping, Callable, Tuple, MutableMapping, Hashable
 from typing import Set, Sequence, Container
-from typing import Optional, Type, Any, Union, Iterable
+from typing import Optional, Type, Any, Union, Iterable, Iterator
 
 import attr
 import cerberus
 from attr.validators import instance_of
-from pytrie import StringTrie
+from pytrie import StringTrie, Trie
 
 from .validation import SCHEMA, GroupKind, validate_raw, merge_raw
+from ..util import iterable
 
 # Type of service initializer table
 InitializerMap = MutableMapping[str, Callable]
@@ -85,8 +86,47 @@ def instantiate(
     return registry[type_name](**service_conf_map)
 
 
-class Index(StringTrie):
+@attr.s(slots=True, frozen=True)
+class Index(Mapping):
     """Mapping of group name prefix to matching service instance"""
+
+    #: The name of an indexed object's attribute
+    #: which reports the keys to index said object by.
+    #:
+    #: For example, specify `tag_prefixes`
+    #: to index all inserted objects
+    #: by all values
+    #: in their respective `tag_prefixes` attributes.
+    by = attr.ib(validator=instance_of(str))
+
+    #: The container to store the indexed objects in.
+    container = attr.ib(
+        default=attr.Factory(StringTrie),
+        validator=instance_of(Trie),
+        hash=False,
+    )
+
+    def insert(self, candidate: Any, strict: bool = False):
+        """Inserts a candidate to appropriate slots.
+
+        Keyword arguments:
+            candidate: The object to insert.
+                The object will be accessible by all keys
+                reported by attribute with name equal to self.by.
+            strict: Whether to raise an AttributeError
+                on attempt to insert an object without the right attribute.
+
+        Raises:
+            AttributeError: Strict is True and incompatible object should be
+                inserted.
+        """
+
+        if strict:
+            keys = getattr(candidate, self.by)
+        else:
+            keys = getattr(candidate, self.by, frozenset())
+
+        self.container.update((k, candidate) for k in keys)
 
     def find(
         self,
@@ -111,7 +151,7 @@ class Index(StringTrie):
         """
 
         # Start from longest prefix
-        candidates = reversed(list(self.iter_prefix_values(prefix)))
+        candidates = reversed(list(self.container.iter_prefix_values(prefix)))
 
         if type is not None:
             candidates = filter(lambda c: isinstance(c, type), candidates)
@@ -127,70 +167,47 @@ class Index(StringTrie):
             message = 'No value with given criteria for {}'.format(prefix)
             raise KeyError(message) from None
 
+    # Mapping interface
 
-class IndexGroup(dict):
-    """Mapping of key attribute name to :py:class:`Index` of matching services.
+    def __getitem__(self, key: Hashable):
+        return self.container[key]
 
-    A key attribute is an attribute declaring for which groups
-    is the service instance responsible,
-    usually by providing a set of group name prefixes.
-    An example of key attribute is the `Repository.tag_prefixes` attribute.
-    """
+    def __iter__(self):
+        return iter(self.container)
 
-    @property
-    def all_services(self) -> Set:
-        """Quick access to all indexed services."""
-
-        indexed_by_id = {
-            id(service): service
-            for index in self.values()
-            for service in index.values()
-        }
-
-        return indexed_by_id.values()
-
-    def distribute(self, *service_seq: Sequence) -> Sequence:
-        """Distribute the services into the appropriate indexes.
-
-        Note that only know (with already existing index) key attributes
-        are considered.
-
-        Keyword arguments:
-            service_seq: The services to distribute.
-
-        Returns:
-            The sequence passed as parameter.
-        """
-
-        for attribute_name, service in product(self.keys(), service_seq):
-            for prefix in getattr(service, attribute_name, frozenset()):
-                self[attribute_name][prefix] = service
-
-        return service_seq
+    def __len__(self):
+        return len(self.container)
 
 
-@attr.s(slots=True)
-class InstanceRegistry:
+@attr.s(slots=True, frozen=True)
+class Registry:
     """Container object for configured instances."""
 
-    #: Indexed service by their key attribute and group name prefix
-    index = attr.ib(validator=instance_of(IndexGroup))
+    #: Mapping of service kind to index of such services
+    index = attr.ib(
+        default=attr.Factory(dict),
+        validator=instance_of(Mapping),
+    )
 
-    #: Registered alias mapping by its kind
-    alias = attr.ib(validator=instance_of(Mapping))
+    #: Mapping of service kind to registered alias map for such services
+    alias = attr.ib(
+        default=attr.Factory(dict),
+        validator=instance_of(Mapping),
+    )
 
     @classmethod
     def from_raw(
         cls,
         raw_configuration: Mapping,
         *,
-        service_registry: InitializerMap = INIT_REGISTRY
+        known_kinds: Iterable = GroupKind,
+        init_registry: InitializerMap = INIT_REGISTRY
     ) -> 'Context':
-        """Create new configuration context from raw configuration values.
+        """Create new registry from configuration values.
 
         Keyword arguments:
             raw_configuration: The setting to create the context from.
-            service_registry: The registry to use
+            init_registry: The registry to use
                 for indirect service instantiation.
 
         Returns:
@@ -199,33 +216,31 @@ class InstanceRegistry:
 
         valid = validate_raw(raw_configuration)
 
-        attributes = {
-            'index': IndexGroup(
-                (g.key_attribute, Index()) for g in GroupKind
-            ),
-            'alias': valid['alias'],
-        }
+        # Create registry with no instances
+        registry = cls(
+            index={k.name: Index(by=k.key_attribute) for k in known_kinds},
+            alias=valid['alias'],
+        )
 
-        # Distribute the services
-        attributes['index'].distribute(*(
-            instantiate(service_conf, registry=service_registry)
-            for service_conf in valid['services']
-        ))
+        # Create and distribute service instances
+        create_instance = partial(instantiate, registry=init_registry)
+        service_iter = map(create_instance, valid['services'])
+        iterable.consume(registry.distribute(service_iter))
 
-        return cls(**attributes)
+        return registry
 
     @classmethod
     def from_merged(
         cls,
         *raw_configuration_seq: Sequence[Mapping],
-        service_registry: InitializerMap = INIT_REGISTRY
+        init_registry: InitializerMap = INIT_REGISTRY
     ) -> 'Context':
         """Create configuration context from multiple configuration mappings.
 
         Keyword arguments:
             raw_configuration_seq: The configuration values
                 to be merged and used for context construction.
-            service_registry: The registry to use
+            init_registry: The registry to use
                 for indirect service instantiation.
 
         Returns:
@@ -239,9 +254,39 @@ class InstanceRegistry:
         norm_sequence = map(normalized, raw_configuration_seq)
         merged = reduce(merge_raw, norm_sequence, accumulator)
 
-        return cls.from_raw(merged, service_registry=service_registry)
+        return cls.from_raw(merged, init_registry=init_registry)
 
-    def unalias(self, kind: str, alias: str, **format_map: Mapping) -> str:
+    @property
+    def all_services(self) -> Set:
+        """Quick access to all indexed services."""
+
+        indexed_by_id = {
+            id(service): service
+            for index in self.index.values()
+            for service in index.values()
+        }
+
+        return indexed_by_id.values()
+
+    def distribute(self, service_iter: Iterable) -> Iterator:
+        """Distribute the services into the appropriate indexes.
+
+        Note that only know (with already existing index) key attributes
+        are considered.
+
+        Keyword arguments:
+            service_seq: The services to distribute.
+
+        Yields:
+            The inserted services.
+        """
+
+        for service in service_iter:
+            for index in self.index.values():
+                index.insert(service)
+            yield service
+
+    def unalias(self, kind: str, alias: str, format_map: Mapping) -> str:
         """Resolve a registered alias.
 
         Keyword arguments:
@@ -260,3 +305,32 @@ class InstanceRegistry:
 
         expanded = self.alias[kind].get(alias, alias)
         return expanded.format_map(format_map)
+
+    def find(
+        self,
+        kind: str,
+        prefix: str,
+        *args,
+        alias_format_map: Mapping = MappingProxyType({}),
+        **kwargs
+    ):
+        """Find a specific kind of service.
+
+        Additional arguments are passed to Index.find().
+
+        Keyword arguments:
+            kind: The kind of the service to look for.
+            prefix: The prefix (or it's alias) to look for.
+            alias_format_map: The formatting values for alias expansion.
+
+        Returns:
+            The same as Index.find().
+
+        Raises:
+            KeyError: Specified kind is not known.
+            Others: The same as Index.find().
+        """
+
+        index = self.index[kind]
+        full_prefix = self.unalias(kind, prefix, alias_format_map)
+        return index.find(full_prefix, *args, **kwargs)

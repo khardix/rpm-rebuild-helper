@@ -12,14 +12,16 @@ import click
 class GroupKind(Enum):
     """Enumeration of recognized package groups"""
 
-    TAG = ('tag_prefixes', 'tag')
-    TARGET = ('target_prefixes', 'target')
+    __slots__ = 'name', 'key_attribute'
 
-    def __init__(self, key_attribute: str, alias_kind: str):
+    TAG = ('tag', 'tag_prefixes')
+    TARGET = ('target', 'target_prefixes')
+
+    def __init__(self, name: str, key_attribute: str):
+        #: The name of this group
+        self.name = name
         #: Name of the key attribute for this group
         self.key_attribute = key_attribute
-        #: Name of the alias kind for this group
-        self.alias_kind = alias_kind
 
 
 #: Configuration file schema
@@ -40,14 +42,14 @@ SCHEMA = {
 
     'alias': {  # registered group name aliases
         'type': 'dict',
-        'keyschema': {'allowed': [g.alias_kind for g in GroupKind]},
+        'keyschema': {'allowed': [g.name for g in GroupKind]},
         'valueschema': {
             'type': 'dict',
             'keyschema': {'type': 'string'},
             'valueschema': {'type': 'string'},
         },
         'default_setter': lambda _doc: {
-            g.alias_kind: ChainMap() for g in GroupKind
+            g.name: ChainMap() for g in GroupKind
         }
     },
 }
