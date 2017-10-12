@@ -218,9 +218,7 @@ class Registry:
 
         # Create registry with no instances
         registry = cls(
-            index={
-                k.alias_kind: Index(by=k.key_attribute) for k in known_kinds
-            },
+            index={k.name: Index(by=k.key_attribute) for k in known_kinds},
             alias=valid['alias'],
         )
 

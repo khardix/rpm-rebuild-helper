@@ -41,7 +41,7 @@ def instance_registry(valid_configuration, filled_initializer_registry):
         valid_configuration,
         init_registry=filled_initializer_registry,
         known_kinds=list(starmap(
-            namedtuple('TestKind', ('alias_kind', 'key_attribute')),
+            namedtuple('TestKind', ('name', 'key_attribute')),
             [('tag', 'tag_prefixes'), ('other', 'other_prefixes')],
         )),
     )
