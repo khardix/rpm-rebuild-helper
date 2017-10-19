@@ -55,7 +55,7 @@ class CollectionSequence:
     def consume(cls, iterator: Iterator[Item]) -> 'CollectionSequence':
         """Create new CollectionSequence from consumed iterator."""
 
-        structure = {}
+        structure = OrderedDict()
 
         for item in iterator:
             collection_map = structure.setdefault(item.el, {})
@@ -109,8 +109,6 @@ class RunParameters:
     source = attr.ib(validator=instance_of(str))
     #: Destination group name
     destination = attr.ib(validator=instance_of(str))
-    #: EL major version
-    el = attr.ib(validator=instance_of(int))
 
     #: Configured and indexed service instances
     service = attr.ib(validator=instance_of(configuration.service.Registry))
@@ -153,8 +151,9 @@ util.logging.basic_config(logger)
     help='Name of a destination group (tag, target, ...).'
 )
 @click.option(
-    '--el', '-e', type=click.IntRange(6), default=7,
-    help='Major EL version.',
+    '--el', '-e', 'el_seq',
+    type=click.IntRange(6), multiple=True, default=[7],
+    help='Major EL version (can be used multiple times).',
 )
 @click.option(
     '--collection', '-c', 'collection_seq', multiple=True,
@@ -184,6 +183,7 @@ def run_chain(
     context,
     processor_seq,
     collection_seq,
+    el_seq,
     report,
     **_config_options,
 ):
@@ -192,12 +192,16 @@ def run_chain(
     Keyword arguments:
         processor_seq: The callables to apply to the collection sequence.
         collection_seq: The sequence of SCL names to be processed.
+        el_seq: The sequence of EL versions to be processed.
         report: The file to write the result report into.
     """
 
-    collection_seq = CollectionSequence({
-        context.params['el']: dict(zip(collection_seq, repeat([]))),
-    })
+    # Start each collection with no packages to process
+    collection_map = dict(zip(collection_seq, repeat([])))
+    # Process all collections for each EL version
+    collection_seq = CollectionSequence(
+        dict.fromkeys(el_seq, collection_map)
+    )
 
     # Apply the processors
     pipeline = reduce(
@@ -326,5 +330,4 @@ def build(params, collection_stream, fail_file):
         readable_failures,
         stream=fail_file,
         default_flow_style=False,
-        default_style='>',
     )
