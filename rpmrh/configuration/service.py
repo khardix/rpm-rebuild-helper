@@ -15,7 +15,7 @@ import cerberus
 from attr.validators import instance_of
 from pytrie import StringTrie, Trie
 
-from .validation import SCHEMA, GroupKind, validate_raw, merge_raw
+from .validation import SERVICE_SCHEMA, GroupKind, validate_raw, merge_raw
 from ..util import iterable
 
 # Type of service initializer table
@@ -247,7 +247,7 @@ class Registry:
             Initialized Context.
         """
 
-        normalized = cerberus.Validator(schema=SCHEMA).normalized
+        normalized = cerberus.Validator(schema=SERVICE_SCHEMA).normalized
 
         # Use default values from schema to initialize the accumulator
         accumulator = normalized({})
