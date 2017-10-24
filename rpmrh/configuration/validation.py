@@ -78,6 +78,7 @@ class ValidationError(click.ClickException):
         )
 
 
+# TODO: Rename to 'merge_raw_service' or make more general
 def merge_raw(
     accumulator: MutableMapping,
     piece: Mapping,
