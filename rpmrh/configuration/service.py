@@ -311,7 +311,6 @@ class Registry:
         kind: str,
         full_prefix: str,
         *args,
-        alias_format_map: Mapping = MappingProxyType({}),
         **kwargs
     ):
         """Find a specific kind of service.
@@ -332,3 +331,30 @@ class Registry:
         """
 
         return self.index[kind].find(full_prefix, *args, **kwargs)
+
+    def resolve(
+        self,
+        kind: str,
+        name_or_alias: str,
+        *find_arguments,
+        alias_format_map: Mapping = MappingProxyType({}),
+        **find_kw_arguments
+    ):
+        """Resolve an alias and find the associated service for it.
+
+        Keyword arguments:
+            kind: The kind of service to look for.
+            name_or_alias: The name prefix (or alias) to look for.
+            alias_format_map: Formatting values for alias resolution.
+
+            Other arguments are passed to the right Index.find().
+
+        Returns: A pair of:
+            1.  Fully resolved group name.
+            2.  Service associated with that group.
+        """
+
+        name = self.unalias(kind, name_or_alias, alias_format_map)
+        service = self.find(kind, name, *find_arguments, **find_kw_arguments)
+
+        return name, service
