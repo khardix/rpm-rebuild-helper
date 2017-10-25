@@ -14,9 +14,9 @@ import click
 from attr.validators import instance_of
 from ruamel import yaml
 
-from . import RESOURCE_ID, util, rpm
-from .configuration import runtime
-from .service.abc import Repository, Builder, BuildFailure
+from .. import RESOURCE_ID, util, rpm
+from ..configuration import runtime
+from ..service.abc import Repository, Builder, BuildFailure
 
 
 @attr.s(slots=True, frozen=True, cmp=False)
