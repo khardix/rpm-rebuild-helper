@@ -309,7 +309,7 @@ class Registry:
     def find(
         self,
         kind: str,
-        prefix: str,
+        full_prefix: str,
         *args,
         alias_format_map: Mapping = MappingProxyType({}),
         **kwargs
@@ -320,7 +320,7 @@ class Registry:
 
         Keyword arguments:
             kind: The kind of the service to look for.
-            prefix: The prefix (or it's alias) to look for.
+            full_prefix: The prefix to look for.
             alias_format_map: The formatting values for alias expansion.
 
         Returns:
@@ -331,6 +331,4 @@ class Registry:
             Others: The same as Index.find().
         """
 
-        index = self.index[kind]
-        full_prefix = self.unalias(kind, prefix, alias_format_map)
-        return index.find(full_prefix, *args, **kwargs)
+        return self.index[kind].find(full_prefix, *args, **kwargs)
