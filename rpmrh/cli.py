@@ -12,7 +12,7 @@ from typing import Optional, Union
 
 import attr
 import click
-import toml
+import pytoml as toml
 from attr.validators import instance_of
 from ruamel import yaml
 
