@@ -24,8 +24,17 @@ class GroupKind(Enum):
         self.key_attribute = key_attribute
 
 
-#: Configuration file schema
-SCHEMA = {
+#: Main configuration file schema
+MAIN_CONF_SCHEMA = {
+    'remote': {  # remote resources URL mapping
+        'type': 'dict',
+        'keyschema': {'type': 'string'},
+        'valueschema': {'type': 'string'},
+    },
+}
+
+#: Service file schema
+SERVICE_SCHEMA = {
     'service': {'rename': 'services'},  # allow both singular and plural forms
     'services': {  # list of services
         'type': 'list',
@@ -69,7 +78,13 @@ class ValidationError(click.ClickException):
         )
 
 
-def merge_raw(accumulator: MutableMapping, piece: Mapping) -> MutableMapping:
+# TODO: Rename to 'merge_raw_service' or make more general
+def merge_raw(
+    accumulator: MutableMapping,
+    piece: Mapping,
+    *,
+    schema: Mapping = SERVICE_SCHEMA
+) -> MutableMapping:
     """Merge raw configuration mapping piece into accumulator.
 
     The merging is performed in-place -- the accumulator will be modified!
@@ -77,12 +92,13 @@ def merge_raw(accumulator: MutableMapping, piece: Mapping) -> MutableMapping:
     Keyword arguments:
         accumulator: The mapping to merge the configuration into.
         piece: The mapping to merge.
+        schema: The schema used for validation.
 
     Returns:
         Updated accumulator.
     """
 
-    normalized = cerberus.Validator(schema=SCHEMA).normalized
+    normalized = cerberus.Validator(schema=schema).normalized
 
     accumulator = normalized(accumulator)
     piece = normalized(piece)
@@ -102,7 +118,11 @@ def merge_raw(accumulator: MutableMapping, piece: Mapping) -> MutableMapping:
     return accumulator
 
 
-def validate_raw(config_map: Mapping) -> Mapping:
+def validate_raw(
+    config_map: Mapping,
+    *,
+    schema: Mapping = SERVICE_SCHEMA
+) -> Mapping:
     """Validate raw configuration data format.
 
     Keyword arguments:
@@ -115,7 +135,7 @@ def validate_raw(config_map: Mapping) -> Mapping:
         ValidationError: On validation failures.
     """
 
-    validator = cerberus.Validator(schema=SCHEMA)
+    validator = cerberus.Validator(schema=schema)
 
     if validator.validate(config_map):
         return validator.document

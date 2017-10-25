@@ -2,9 +2,8 @@
 
 import logging
 from collections import defaultdict, OrderedDict
-from contextlib import ExitStack
 from functools import reduce, wraps
-from itertools import chain, repeat
+from itertools import repeat
 from operator import attrgetter
 from pathlib import Path
 from typing import Callable, Iterator, Iterable, Mapping, TextIO
@@ -12,11 +11,11 @@ from typing import Optional, Union
 
 import attr
 import click
-import toml
 from attr.validators import instance_of
 from ruamel import yaml
 
-from . import RESOURCE_ID, configuration, util, rpm
+from . import RESOURCE_ID, util, rpm
+from .configuration import runtime
 from .service.abc import Repository, Builder, BuildFailure
 
 
@@ -101,39 +100,6 @@ class CollectionSequence:
         return wrapper
 
 
-@attr.s(slots=True, frozen=True)
-class RunParameters:
-    """Global run parameters (CLI options, etc.)"""
-
-    #: Source group name
-    source = attr.ib(validator=instance_of(str))
-    #: Destination group name
-    destination = attr.ib(validator=instance_of(str))
-
-    #: Configured and indexed service instances
-    service = attr.ib(validator=instance_of(configuration.service.Registry))
-
-    @service.default
-    def load_user_and_bundled_services(_self):
-        """Loads all available user and bundled service configuration files."""
-
-        streams = chain(
-            util.open_resource_files(
-                root_dir='conf.d',
-                extension='.service.toml',
-            ),
-            util.open_config_files(
-                extension='.service.toml',
-            ),
-        )
-
-        with ExitStack() as opened:
-            streams = map(opened.enter_context, streams)
-            contents = map(toml.load, streams)
-
-            return configuration.service.Registry.from_merged(*contents)
-
-
 # Logging setup
 logger = logging.getLogger(RESOURCE_ID)
 util.logging.basic_config(logger)
@@ -165,15 +131,15 @@ util.logging.basic_config(logger)
     help='File name of the final report [default: stdout].',
 )
 @click.pass_context
-def main(context, **options):
+def main(context, source, destination, **_options):
     """RPM Rebuild Helper – an automation tool for mass RPM rebuilding,
     with focus on Software Collections.
     """
 
     # Store configuration
-    config_fields = {field.name for field in attr.fields(RunParameters)}
-    context.obj = RunParameters(**{
-        k: v for k, v in options.items() if k in config_fields
+    context.obj = runtime.Parameters(cli={
+        'source': source,
+        'destination': destination,
     })
 
 
@@ -224,15 +190,19 @@ def diff(params, collection_stream):
         def latest_builds(group):
             """Fetch latest builds from a group."""
 
-            tag = params.service.unalias('tag', group, attr.asdict(scl))
-            repo = params.service.find('tag', tag, type=Repository)
+            tag = params.service_registry.unalias(
+                'tag',
+                group,
+                attr.asdict(scl),
+            )
+            repo = params.service_registry.find('tag', tag, type=Repository)
 
             yield from repo.latest_builds(tag)
 
         # Packages present in destination
         present = {
             build.name: build
-            for build in latest_builds(params.destination)
+            for build in latest_builds(params.cli['destination'])
             if build.name.startswith(scl.collection)
         }
 
@@ -243,7 +213,7 @@ def diff(params, collection_stream):
             )
 
         missing = (
-            pkg for pkg in latest_builds(params.source)
+            pkg for pkg in latest_builds(params.cli['source'])
             if pkg.name.startswith(scl.collection)
             and not obsolete(pkg)
         )
@@ -267,8 +237,12 @@ def download(params, collection_stream, output_dir):
     output_dir = Path(output_dir).resolve()
 
     for scl in collection_stream:
-        tag = params.service.unalias('tag', params.source, attr.asdict(scl))
-        repo = params.service.find('tag', tag, type=Repository)
+        tag = params.service_registry.unalias(
+            'tag',
+            params.cli['source'],
+            attr.asdict(scl),
+        )
+        repo = params.service_registry.find('tag', tag, type=Repository)
         collection_dir = output_dir / scl.collection
 
         collection_dir.mkdir(exist_ok=True)
@@ -296,10 +270,10 @@ def build(params, collection_stream, fail_file):
     failed = defaultdict(set)
 
     for scl in collection_stream:
-        target = params.service.unalias(
-            'target', params.destination, attr.asdict(scl),
+        target = params.service_registry.unalias(
+            'target', params.cli['destination'], attr.asdict(scl),
         )
-        builder = params.service.find('target', target, type=Builder)
+        builder = params.service_registry.find('target', target, type=Builder)
 
         def build_and_filter_failures(packages):
             with builder:

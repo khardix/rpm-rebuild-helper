@@ -288,3 +288,33 @@ def test_context_format_missing_alias(instance_registry):
     )
 
     assert full_name == 'no-tomorrow'
+
+
+def test_registry_resolves_group_name(
+    instance_registry,
+    service_type,
+    unknown_type,
+):
+    """Registry can fully resolve an alias and find associated group."""
+
+    alias = 'test'
+    format_map = {'extra': 'world'}
+
+    name, service = instance_registry.resolve(
+        kind='tag',
+        name_or_alias=alias,
+        alias_format_map=format_map,
+        type=service_type,
+    )
+
+    assert name == 'test-tag-world'
+    assert isinstance(service, service_type)
+    assert any(name.startswith(prefix) for prefix in service.tag_prefixes)
+
+    with pytest.raises(KeyError):
+        instance_registry.resolve(
+            kind='tag',
+            name_or_alias=alias,
+            alias_format_map=format_map,
+            type=unknown_type,
+        )

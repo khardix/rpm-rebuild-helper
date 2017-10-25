@@ -9,11 +9,11 @@ attrs = ">=17"
 pytrie = "*"
 requests = "*"
 "requests-file" = "*"
-toml = "*"
 pyxdg = "*"
 cerberus = "*"
 "click-log" = "*"
 "ruamel.yaml" = "<=0.15"
+pytoml = "*"
 
 [requires]
 python_version = "3.6"

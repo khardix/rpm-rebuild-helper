@@ -98,7 +98,7 @@ def test_load_pkg_resources_opens_correct_files():
 def test_load_conf_files_open_correct_files():
     """Only requested configuration files are opened."""
 
-    streams = util.open_config_files(extension='.service.toml')
+    streams = util.open_config_files('*.service.toml')
     contents = [s.read() for s in streams]
 
     assert all(isinstance(c, str) for c in contents)

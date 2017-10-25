@@ -4,7 +4,7 @@ from io import TextIOWrapper
 from itertools import chain
 from pathlib import Path
 from pkg_resources import resource_listdir, resource_stream
-from typing import Iterator, TextIO
+from typing import Iterator, TextIO, Sequence, Optional
 
 from xdg.BaseDirectory import load_config_paths
 
@@ -46,23 +46,28 @@ def open_resource_files(
 
 
 def open_config_files(
-    extension: str,
+    glob: str,
+    search_path_seq: Optional[Sequence[Path]] = None,
     *,
     encoding: str = 'utf-8'
 ) -> Iterator[TextIO]:
     """Open user configuration files.
 
     Keyword arguments:
-        extension: Extension of the files that should be opened.
+        glob: The glob specifier matching the files to be opened.
+        search_path_seq: The paths to search for the configuration files.
+            Defaults to XDG configuration search path.
         encoding: File encoding.
 
     Yields:
         Opened text streams.
     """
 
-    conf_dirs = map(Path, load_config_paths(RESOURCE_ID))
+    if search_path_seq is None:
+        search_path_seq = map(Path, load_config_paths(RESOURCE_ID))
+
     conf_file_paths = chain.from_iterable(
-        pth.glob('*{}'.format(extension)) for pth in conf_dirs
+        pth.glob(glob) for pth in search_path_seq,
     )
     conf_files = (pth.open(encoding=encoding) for pth in conf_file_paths)
 

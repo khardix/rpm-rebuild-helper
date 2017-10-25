@@ -137,7 +137,7 @@ def valid_configuration_seq(valid_configuration):
             {
                 'type': 'test-service',
                 'name': 'extra-service',
-                'tag_prefixes': {'extra'},
+                'tag_prefixes': ['extra'],
             },
         ],
 

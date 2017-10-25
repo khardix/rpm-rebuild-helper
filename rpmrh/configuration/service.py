@@ -15,7 +15,7 @@ import cerberus
 from attr.validators import instance_of
 from pytrie import StringTrie, Trie
 
-from .validation import SCHEMA, GroupKind, validate_raw, merge_raw
+from .validation import SERVICE_SCHEMA, GroupKind, validate_raw, merge_raw
 from ..util import iterable
 
 # Type of service initializer table
@@ -247,7 +247,7 @@ class Registry:
             Initialized Context.
         """
 
-        normalized = cerberus.Validator(schema=SCHEMA).normalized
+        normalized = cerberus.Validator(schema=SERVICE_SCHEMA).normalized
 
         # Use default values from schema to initialize the accumulator
         accumulator = normalized({})
@@ -309,9 +309,8 @@ class Registry:
     def find(
         self,
         kind: str,
-        prefix: str,
+        full_prefix: str,
         *args,
-        alias_format_map: Mapping = MappingProxyType({}),
         **kwargs
     ):
         """Find a specific kind of service.
@@ -320,7 +319,7 @@ class Registry:
 
         Keyword arguments:
             kind: The kind of the service to look for.
-            prefix: The prefix (or it's alias) to look for.
+            full_prefix: The prefix to look for.
             alias_format_map: The formatting values for alias expansion.
 
         Returns:
@@ -331,6 +330,31 @@ class Registry:
             Others: The same as Index.find().
         """
 
-        index = self.index[kind]
-        full_prefix = self.unalias(kind, prefix, alias_format_map)
-        return index.find(full_prefix, *args, **kwargs)
+        return self.index[kind].find(full_prefix, *args, **kwargs)
+
+    def resolve(
+        self,
+        kind: str,
+        name_or_alias: str,
+        *find_arguments,
+        alias_format_map: Mapping = MappingProxyType({}),
+        **find_kw_arguments
+    ):
+        """Resolve an alias and find the associated service for it.
+
+        Keyword arguments:
+            kind: The kind of service to look for.
+            name_or_alias: The name prefix (or alias) to look for.
+            alias_format_map: Formatting values for alias resolution.
+
+            Other arguments are passed to the right Index.find().
+
+        Returns: A pair of:
+            1.  Fully resolved group name.
+            2.  Service associated with that group.
+        """
+
+        name = self.unalias(kind, name_or_alias, alias_format_map)
+        service = self.find(kind, name, *find_arguments, **find_kw_arguments)
+
+        return name, service
