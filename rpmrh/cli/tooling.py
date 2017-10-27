@@ -2,10 +2,12 @@
 
 from collections import defaultdict
 from copy import deepcopy
+from functools import partial, wraps
 from typing import Iterator, Optional, Union
-from typing import Mapping, TextIO
+from typing import Mapping, TextIO, Callable
 
 import attr
+import click
 from ruamel import yaml
 from attr.validators import optional, instance_of
 
@@ -147,3 +149,63 @@ class PackageStream:
             for scl, pkg_list in collection_map.items()
             for nevra in pkg_list
         )
+
+
+def stream_processor(
+    command: Optional[Callable] = None,
+    **option_kind,
+) -> Callable:
+    """Command decorator for processing a package stream.
+
+    This decorator adjust the Package iterator
+    and then injects it to the wrapped command
+    as first positional argument.
+
+    Keyword arguments:
+        CLI option name to a group kind.
+        Each matching CLI option will be interpreted
+        as a group name or alias
+        and resolved as such for all packages
+        passing through to the wrapped command.
+
+    Returns:
+        The wrapped command.
+    """
+
+    if command is None:
+        return partial(stream_processor, **option_kind)
+
+    @wraps(command)
+    @click.pass_context
+    def wrapper(context, *command_args, **command_kwargs):
+        """Construct a closure that adjusts the stream and wraps the command.
+        """
+
+        # Need Parameters for the CLI options and service registry
+        parameters = context.find_object(Parameters)
+
+        # Prepare the group(s) expansion
+        def expand_groups(package: Package) -> Package:
+            """Expand all specified groups for the passed package."""
+
+            group_map = {
+                option: PackageGroup(*parameters.service_registry.resolve(
+                    name_or_alias=parameters.cli_options[option],
+                    kind=kind,
+                    alias_format_map=attr.asdict(package, recurse=False),
+                ))
+                for option, kind in option_kind.items()
+            }
+
+            return attr.evolve(package, **group_map)
+
+        @wraps(command)
+        def processor(stream: Iterator[Package]) -> Iterator[Package]:
+            """Expand the groups and inject the stream to the command."""
+
+            stream = map(expand_groups, stream)
+            return context.invoke(
+                command, stream, *command_args, **command_kwargs,
+            )
+        return processor
+    return wrapper

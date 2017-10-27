@@ -1,10 +1,15 @@
 """Tests for the CLI tooling."""
 
+from collections import namedtuple
+
+import click
 import pytest
+from pytrie import StringTrie
 from ruamel import yaml
 
 import rpmrh.cli.tooling as tooling
 from rpmrh import rpm
+from rpmrh.configuration import service
 
 
 @pytest.fixture
@@ -35,6 +40,36 @@ def yaml_structure(package_stream):
         scl_list.append(str(pkg.metadata))
 
     return structure
+
+
+@pytest.fixture
+def instance_registry():
+    """Filled test registry"""
+
+    Service = namedtuple('Service', ['identification'])
+    index_data = StringTrie(test=Service('simple'))
+    return service.Registry(
+        index={'tag': service.Index('tag', index_data)},
+        alias={'tag': {}},
+    )
+
+
+@pytest.fixture
+def command(instance_registry):
+    """Dummy click command for tests of stream processing"""
+
+    context_settings = dict(obj=tooling.Parameters(
+        cli_options={'source': 'test', 'destination': None},
+        main_config={},
+        service_registry=instance_registry,
+    ))
+
+    @click.command(context_settings=context_settings)
+    @tooling.stream_processor(source='tag')
+    def dummy(stream):
+        return stream
+
+    return dummy
 
 
 def test_stream_iteration(package_stream):
@@ -68,3 +103,18 @@ def test_stream_deserialization(package_stream, yaml_structure):
 
     assert result is not package_stream
     assert result == package_stream
+
+
+def test_stream_expansion(command, package_stream):
+    """All packages in a stream are expanded as expected"""
+
+    ctx = command.make_context('test_stream_expansion', [])
+    stream = ctx.invoke(command)(package_stream)
+
+    def valid_package(package):
+        valid_source = package.source.service.identification == 'simple'
+        valid_destination = package.destination is None
+
+        return valid_source and valid_destination
+
+    assert all(map(valid_package, stream))
