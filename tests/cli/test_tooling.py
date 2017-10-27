@@ -23,6 +23,20 @@ def package_stream():
     )
 
 
+@pytest.fixture
+def yaml_structure(package_stream):
+    """Expected YAML representation of package_stream"""
+
+    structure = {}
+
+    for pkg in sorted(package_stream._container):
+        el_map = structure.setdefault(pkg.el, {})
+        scl_list = el_map.setdefault(pkg.collection, [])
+        scl_list.append(str(pkg.metadata))
+
+    return structure
+
+
 def test_stream_iteration(package_stream):
     """The iteration is performed in the expected order."""
 
@@ -39,17 +53,18 @@ def test_stream_consumption(package_stream):
     assert result == package_stream
 
 
-def test_stream_serialization(package_stream):
+def test_stream_serialization(package_stream, yaml_structure):
     """PackageStream can be serialized into YAML."""
-
-    EXPECTED = yaml.safe_load('''
-    7:
-        test:
-            - abcde-0:1.0-1.el7.src
-            - abcde-0:2.0-1.el7.src
-            - test-0:2.1-3.el7.src
-    ''')
 
     result = yaml.safe_load(package_stream.to_yaml())
 
-    assert result == EXPECTED
+    assert result == yaml_structure
+
+
+def test_stream_deserialization(package_stream, yaml_structure):
+    """PackageStream can be created from YAML representation."""
+
+    result = tooling.PackageStream.from_yaml(yaml.safe_dump(yaml_structure))
+
+    assert result is not package_stream
+    assert result == package_stream

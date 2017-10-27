@@ -2,7 +2,8 @@
 
 from collections import defaultdict
 from copy import deepcopy
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Union
+from typing import Mapping, TextIO
 
 import attr
 from ruamel import yaml
@@ -86,3 +87,41 @@ class PackageStream:
             structure[pkg.el][pkg.collection].append(str(pkg.metadata))
 
         return yaml.dump(structure, stream, Dumper=YAMLDumper)
+
+    @classmethod
+    def from_yaml(cls, structure_or_stream: Union[Mapping, TextIO]):
+        """Create a new Stream from YAML format.
+
+        Keyword arguments:
+            structure_or_stream: The object to read the packages from.
+                Either a mapping
+                (interpreted as an already converted YAML structure)
+                or an opened file stream to read the data from,
+                or an YAML-formatted string.
+
+        Returns:
+            New PackageStream constructed from the input data.
+        """
+
+        if isinstance(structure_or_stream, Mapping):
+            structure = structure_or_stream
+
+        elif isinstance(structure_or_stream, (TextIO, str)):
+            structure = yaml.safe_load(structure_or_stream)
+
+        else:
+            message = 'Unsupported value type: {}'.format(
+                type(structure_or_stream)
+            )
+            raise ValueError(message)
+
+        return cls(
+            Package(
+                el=el,
+                collection=scl,
+                metadata=rpm.Metadata.from_nevra(nevra),
+            )
+            for el, collection_map in structure.items()
+            for scl, pkg_list in collection_map.items()
+            for nevra in pkg_list
+        )
