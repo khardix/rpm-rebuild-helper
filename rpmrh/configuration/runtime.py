@@ -5,11 +5,9 @@ from contextlib import ExitStack
 from itertools import chain
 from operator import methodcaller
 from pathlib import Path
-from typing import Sequence, Optional, Mapping
+from typing import Sequence, Optional
 
-import attr
 import pytoml as toml
-from attr.validators import instance_of
 
 from .service import Registry, InitializerMap, INIT_REGISTRY
 from .validation import MAIN_CONF_SCHEMA, validate_raw
@@ -95,23 +93,3 @@ def load_services(
             *content_iter,
             init_registry=init_registry,
         )
-
-
-@attr.s(slots=True, frozen=True)
-class Parameters:
-    """A structure holding parameters for single application run."""
-
-    #: Parsed command-line parameters
-    cli = attr.ib(validator=instance_of(Mapping))
-
-    #: Main configuration values
-    main_config = attr.ib(
-        default=attr.Factory(load_configuration),
-        validator=instance_of(Mapping),
-    )
-
-    #: Known service registry
-    service_registry = attr.ib(
-        default=attr.Factory(load_services),
-        validator=instance_of(Registry),
-    )

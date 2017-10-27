@@ -10,11 +10,33 @@ from ruamel import yaml
 from attr.validators import optional, instance_of
 
 from .. import rpm
+from ..configuration import service
+from ..configuration.runtime import load_configuration, load_services
 
 
 # Add YAML dump capabilities for python types not supported by default
 YAMLDumper = deepcopy(yaml.SafeDumper)
 YAMLDumper.add_representer(defaultdict, lambda r, d: r.represent_dict(d))
+
+
+@attr.s(slots=True, frozen=True)
+class Parameters:
+    """A structure holding parameters for single application run."""
+
+    #: Parsed command-line parameters
+    cli = attr.ib(validator=instance_of(Mapping))
+
+    #: Main configuration values
+    main_config = attr.ib(
+        default=attr.Factory(load_configuration),
+        validator=instance_of(Mapping),
+    )
+
+    #: Known service registry
+    service_registry = attr.ib(
+        default=attr.Factory(load_services),
+        validator=instance_of(service.Registry),
+    )
 
 
 @attr.s(slots=True, frozen=True, cmp=False)
