@@ -3,6 +3,8 @@
 from collections import defaultdict
 from copy import deepcopy
 from functools import partial, wraps
+from itertools import groupby, starmap
+from operator import attrgetter, itemgetter
 from typing import Iterator, Optional, Union
 from typing import Mapping, TextIO, Callable
 
@@ -60,7 +62,11 @@ class Package:
     #: The collection to which the package belongs
     collection = attr.ib(validator=instance_of(str))
     #: RPM metadata of the package
-    metadata = attr.ib(validator=instance_of(rpm.Metadata))
+    #: If None, package acts as a placeholder for an empty collection
+    metadata = attr.ib(
+        default=None,
+        validator=optional(instance_of(rpm.Metadata)),
+    )
 
     #: The source group for this package
     source = attr.ib(
@@ -208,4 +214,40 @@ def stream_processor(
                 command, stream, *command_args, **command_kwargs,
             )
         return processor
+    return wrapper
+
+
+# TODO: POC, re-examine/review again
+def stream_generator(command: Callable = None, **option_kind):
+    """Command decorator for generating a package stream.
+
+    Packages in the stream are grouped by (el, collection)
+    and the actual metadata are discarded.
+    It is assumed that the decorated command will generate
+    new metadata for each group.
+
+    Keyword arguments:
+        Same as for stream_processor().
+
+    Returns:
+        The wrapped command.
+    """
+
+    if command is None:
+        return partial(stream_generator, **option_kind)
+
+    @wraps(command)
+    def wrapper(*args, **kwargs):
+        # Obtain the processor
+        processor = stream_processor(command, **option_kind)(*args, **kwargs)
+
+        @wraps(command)
+        def generator(stream: Iterator[Package]) -> Iterator[Package]:
+            # Group the packages, discard metadata
+            groupings = groupby(stream, attrgetter('el', 'collection'))
+            keys = map(itemgetter(0), groupings)
+            placeholders = starmap(Package, keys)
+
+            return processor(placeholders)
+        return generator
     return wrapper

@@ -54,9 +54,8 @@ def instance_registry():
     )
 
 
-@pytest.fixture
-def command(instance_registry):
-    """Dummy click command for tests of stream processing"""
+def make_command(function, instance_registry):
+    """Turn a function into click Command"""
 
     context_settings = dict(obj=tooling.Parameters(
         cli_options={'source': 'test', 'destination': None},
@@ -64,12 +63,32 @@ def command(instance_registry):
         service_registry=instance_registry,
     ))
 
-    @click.command(context_settings=context_settings)
-    @tooling.stream_processor(source='tag')
-    def dummy(stream):
-        return stream
+    decorator = click.command(context_settings=context_settings)
+    return decorator(function)
 
-    return dummy
+
+@pytest.fixture
+def process_command(instance_registry):
+    """Dummy click command for tests of stream processing"""
+
+    processor = tooling.stream_processor(
+        lambda stream: stream,
+        source='tag',
+    )
+
+    return make_command(processor, instance_registry)
+
+
+@pytest.fixture
+def generate_command(instance_registry):
+    """Dummy click command for tests of stream generation"""
+
+    generator = tooling.stream_generator(
+        lambda stream: stream,
+        source='tag',
+    )
+
+    return make_command(generator, instance_registry)
 
 
 def test_stream_iteration(package_stream):
@@ -105,16 +124,35 @@ def test_stream_deserialization(package_stream, yaml_structure):
     assert result == package_stream
 
 
-def test_stream_expansion(command, package_stream):
+def test_stream_expansion(process_command, package_stream):
     """All packages in a stream are expanded as expected"""
 
-    ctx = command.make_context('test_stream_expansion', [])
-    stream = ctx.invoke(command)(package_stream)
+    # Manually apply the decorator
+    ctx = process_command.make_context('test_stream_expansion', [])
+    stream = ctx.invoke(process_command)(package_stream)
 
     def valid_package(package):
         valid_source = package.source.service.identification == 'simple'
         valid_destination = package.destination is None
+        valid_metadata = package.metadata is not None
 
-        return valid_source and valid_destination
+        return all((valid_source, valid_destination, valid_metadata))
 
     assert all(map(valid_package, stream))
+
+
+def test_stream_generation(generate_command, package_stream):
+    """Generator provides appropriate empty collections"""
+
+    ctx = generate_command.make_context('test_stream_generation', [])
+    stream = list(ctx.invoke(generate_command)(package_stream))
+
+    def valid_package(package):
+        source = package.source.service.identification == 'simple'
+        destination = package.destination is None
+        metadata = package.metadata is None
+
+        return all((source, destination, metadata))
+
+    assert all(map(valid_package, stream))
+    assert len(stream) == 1
