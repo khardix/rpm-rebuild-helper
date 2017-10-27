@@ -24,7 +24,7 @@ class Parameters:
     """A structure holding parameters for single application run."""
 
     #: Parsed command-line parameters
-    cli = attr.ib(validator=instance_of(Mapping))
+    cli_options = attr.ib(validator=instance_of(Mapping))
 
     #: Main configuration values
     main_config = attr.ib(
