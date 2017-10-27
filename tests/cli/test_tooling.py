@@ -1,6 +1,7 @@
 """Tests for the CLI tooling."""
 
 import pytest
+from ruamel import yaml
 
 import rpmrh.cli.tooling as tooling
 from rpmrh import rpm
@@ -36,3 +37,19 @@ def test_stream_consumption(package_stream):
 
     assert result is not package_stream
     assert result == package_stream
+
+
+def test_stream_serialization(package_stream):
+    """PackageStream can be serialized into YAML."""
+
+    EXPECTED = yaml.safe_load('''
+    7:
+        test:
+            - abcde-0:1.0-1.el7.src
+            - abcde-0:2.0-1.el7.src
+            - test-0:2.1-3.el7.src
+    ''')
+
+    result = yaml.safe_load(package_stream.to_yaml())
+
+    assert result == EXPECTED
