@@ -2,102 +2,19 @@
 
 import logging
 from collections import defaultdict, OrderedDict
-from functools import reduce, wraps
-from itertools import repeat
+from functools import reduce, partial
+from itertools import product
 from operator import attrgetter
 from pathlib import Path
-from typing import Callable, Iterator, Iterable, Mapping, TextIO
-from typing import Optional, Union
 
 import attr
 import click
-from attr.validators import instance_of
 from ruamel import yaml
 
-from .. import RESOURCE_ID, util, rpm
-from ..configuration import runtime
-from ..service.abc import Repository, Builder, BuildFailure
-
-
-@attr.s(slots=True, frozen=True, cmp=False)
-class CollectionSequence:
-    """A container for loading, dumping and iterating over a stream of SCLs."""
-
-    #: Inner data structure; two-level mapping: el -> collection -> packages
-    structure = attr.ib(validator=instance_of(Mapping))
-
-    @attr.s(slots=True, frozen=True, cmp=False)
-    class Item:
-        """Single iteration item"""
-
-        #: The EL version of a collection
-        el = attr.ib(validator=instance_of(int))
-        #: The name of a collection
-        collection = attr.ib(validator=instance_of(str))
-        #: An iterable of packages
-        #: associated with the collection and EL version
-        package_iter = attr.ib(validator=instance_of(Iterable))
-
-        def __iter__(self):
-            """Tuple-like iteration (enables unpacking)"""
-
-            return iter(attr.astuple(self, recurse=False))
-
-    def __iter__(self):
-        """Iterate over current structure"""
-
-        for el, collection_map in self.structure.items():
-            for collection, packages in collection_map.items():
-                yield self.Item(el, collection, packages)
-
-    @classmethod
-    def consume(cls, iterator: Iterator[Item]) -> 'CollectionSequence':
-        """Create new CollectionSequence from consumed iterator."""
-
-        structure = OrderedDict()
-
-        for item in iterator:
-            collection_map = structure.setdefault(item.el, {})
-            collection_map[item.collection] = sorted(item.package_iter)
-
-        return cls(structure)
-
-    @classmethod
-    def from_yaml(cls, stream: Union[TextIO, str]) -> 'CollectionSequence':
-        """Create new CollectionSequence from YAML."""
-
-        # TODO: Validation
-        # TODO: Package conversion str->rpm.Metadata
-        return cls(yaml.safe_load(stream))
-
-    def to_yaml(self, stream: Optional[TextIO] = None) -> Optional[str]:
-        """Dump current contents into YAML."""
-
-        def represent_metadata(dumper: yaml.Dumper, metadata: rpm.Metadata):
-            return dumper.represent_str(str(metadata))
-        yaml.SafeDumper.add_multi_representer(rpm.Metadata, represent_metadata)
-
-        return yaml.safe_dump(
-            self.structure, stream,
-            default_flow_style=False,
-        )
-
-    # Command decorators
-
-    @staticmethod
-    def processor(func: Callable):
-        """A decorator for commands processing `CollectionSequence.Item`s."""
-
-        @wraps(func)
-        def wrapper(*args, **kwargs):  # will receive arguments for func
-            @wraps(func)
-            def bound(iterator: Iterator[CollectionSequence.Item]):
-                """Bind args and kwargs, "wait" for the iterator"""
-
-                return func(iterator, *args, **kwargs)
-
-            return bound
-        return wrapper
+from .tooling import Parameters, Package, PackageStream
+from .tooling import stream_processor, stream_generator
+from .. import RESOURCE_ID, util
+from ..service.abc import BuildFailure
 
 
 # Logging setup
@@ -137,7 +54,7 @@ def main(context, source, destination, **_options):
     """
 
     # Store configuration
-    context.obj = runtime.Parameters(cli={
+    context.obj = Parameters(cli_options={
         'source': source,
         'destination': destination,
     })
@@ -162,47 +79,41 @@ def run_chain(
         report: The file to write the result report into.
     """
 
-    # Start each collection with no packages to process
-    collection_map = dict(zip(collection_seq, repeat([])))
-    # Process all collections for each EL version
-    collection_seq = CollectionSequence(
-        dict.fromkeys(el_seq, collection_map)
+    # Create placeholders for all collections and EL versions
+    stream = PackageStream(
+        Package(*pair) for pair in product(el_seq, collection_seq)
     )
 
     # Apply the processors
     pipeline = reduce(
         lambda data, proc: proc(data),
         processor_seq,
-        collection_seq
+        stream
     )
 
     # Output the results in YAML format
-    CollectionSequence.consume(pipeline).to_yaml(stream=report)
+    PackageStream.consume(pipeline).to_yaml(stream=report)
 
 
 @main.command()
-@CollectionSequence.processor
-@click.pass_obj
-def diff(params, collection_stream):
+@stream_generator(source='tag', destination='tag')
+def diff(collection_stream):
     """List all packages from source tag missing in destination tag."""
 
     for scl in collection_stream:
-        def latest_builds(group):
-            """Fetch latest builds from a group."""
-
-            tag = params.service_registry.unalias(
-                'tag',
-                group,
-                attr.asdict(scl),
-            )
-            repo = params.service_registry.find('tag', tag, type=Repository)
-
-            yield from repo.latest_builds(tag)
+        destination_builds = partial(
+            scl.destination.service.latest_builds,
+            scl.destination.label,
+        )
+        source_builds = partial(
+            scl.source.service.latest_builds,
+            scl.source.label,
+        )
 
         # Packages present in destination
         present = {
             build.name: build
-            for build in latest_builds(params.cli['destination'])
+            for build in destination_builds()
             if build.name.startswith(scl.collection)
         }
 
@@ -213,12 +124,12 @@ def diff(params, collection_stream):
             )
 
         missing = (
-            pkg for pkg in latest_builds(params.cli['source'])
+            pkg for pkg in source_builds()
             if pkg.name.startswith(scl.collection)
             and not obsolete(pkg)
         )
 
-        yield attr.evolve(scl, package_iter=missing)
+        yield from (attr.evolve(scl, metadata=package) for package in missing)
 
 
 @main.command()
@@ -228,32 +139,21 @@ def diff(params, collection_stream):
     default='.',
     help='Target directory for downloaded packages [default: "."].'
 )
-@CollectionSequence.processor
-@click.pass_obj
-def download(params, collection_stream, output_dir):
+@stream_processor(source='tag')
+def download(package_stream, output_dir):
     """Download packages into specified directory."""
 
     log = logger.getChild('download')
     output_dir = Path(output_dir).resolve()
 
-    for scl in collection_stream:
-        tag = params.service_registry.unalias(
-            'tag',
-            params.cli['source'],
-            attr.asdict(scl),
-        )
-        repo = params.service_registry.find('tag', tag, type=Repository)
-        collection_dir = output_dir / scl.collection
-
+    for pkg in package_stream:
+        collection_dir = output_dir / pkg.collection
         collection_dir.mkdir(exist_ok=True)
 
-        def logged_download(package):
-            log.info('Fetching {}'.format(package))
-            return repo.download(package, collection_dir)
+        log.info('Fetching {}'.format(pkg.metadata))
+        local = pkg.source.service.download(pkg.metadata, collection_dir)
 
-        paths = map(logged_download, scl.package_iter)
-
-        yield attr.evolve(scl, package_iter=paths)
+        yield attr.evolve(pkg, metadata=local)
 
 
 @main.command()
@@ -262,29 +162,19 @@ def download(params, collection_stream, output_dir):
     type=click.File(mode='w', encoding='utf-8', lazy=True),
     help='Path to store build failures to [default: stderr].',
 )
-@CollectionSequence.processor
-@click.pass_obj
-def build(params, collection_stream, fail_file):
+@stream_processor(destination='target')
+def build(package_stream, fail_file):
     """Attempt to build packages in target."""
 
     failed = defaultdict(set)
 
-    for scl in collection_stream:
-        target = params.service_registry.unalias(
-            'target', params.cli['destination'], attr.asdict(scl),
-        )
-        builder = params.service_registry.find('target', target, type=Builder)
-
-        def build_and_filter_failures(packages):
-            with builder:
-                for pkg in packages:
-                    try:
-                        yield builder.build(target, pkg)
-                    except BuildFailure as failure:
-                        failed[scl.collection].add(failure)
-
-        built = build_and_filter_failures(scl.package_iter)
-        yield attr.evolve(scl, package_iter=built)
+    for pkg in package_stream:
+        with pkg.destination.service as builder:
+            try:
+                built = builder.build(pkg.destination.label, pkg.metadata)
+                yield attr.evolve(pkg, metadata=built)
+            except BuildFailure as failure:
+                failed[pkg.collection].add(failure)
 
     if not failed:
         raise StopIteration()
