@@ -1,12 +1,13 @@
 """Test the rpmrh.rpm module."""
 
+import sys
 import attr
 import pytest
 
 from rpmrh import rpm
 
 
-@pytest.fixture(params=[
+METADATA_PARAMETERS = [
     # Only required fields
     {'name': 'rpmrh', 'version': '0.1.0', 'release': '1.fc26'},
     # All possible fields
@@ -17,11 +18,40 @@ from rpmrh import rpm
         'epoch': '1',
         'arch': 'x86_64',
     },
-])
+]
+
+
+@pytest.fixture(params=METADATA_PARAMETERS)
 def metadata(request) -> rpm.Metadata:
     """Provide RPM metadata object"""
 
     return rpm.Metadata(**request.param)
+
+
+@pytest.fixture(params=METADATA_PARAMETERS + [
+    # epoch in weird place
+    '1:rpmrh-0.1.0-1.fc26.x86_64',
+])
+def nevra(request) -> str:
+    """Provide NEVRA string for metadata creation"""
+
+    if isinstance(request.param, str):
+        return request.param
+
+    format_map = request.param
+
+    # Pre-formatting
+    if 'epoch' in format_map:
+        format_map['epoch'] = '{epoch}:'.format_map(format_map)
+    else:
+        format_map['epoch'] = ''
+
+    if 'arch' in format_map:
+        format_map['arch'] = '.{arch}'.format_map(format_map)
+    else:
+        format_map['arch'] = ''
+
+    return '{name}-{epoch}{version}-{release}{arch}'.format_map(format_map)
 
 
 @pytest.fixture
@@ -111,3 +141,16 @@ def test_construction_from_path(minimal_srpm_path):
     assert metadata.epoch == 0
     assert metadata.arch == 'src'
     assert metadata.path == minimal_srpm_path
+
+
+def test_construction_from_nevra(nevra):
+    """Metadata can be obtained by parsing a NEVRA string."""
+
+    metadata = rpm.Metadata.from_nevra(nevra)
+    print(nevra, '->', repr(metadata), file=sys.stderr)
+
+    assert metadata.name == 'rpmrh'
+    assert metadata.epoch in {0, 1}
+    assert metadata.version == '0.1.0'
+    assert metadata.release == '1.fc26'
+    assert metadata.arch in {'src', 'x86_64'}
