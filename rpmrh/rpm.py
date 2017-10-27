@@ -1,6 +1,7 @@
 """RPM-related classes and procedures."""
 
 import operator
+import re
 from functools import partialmethod
 from pathlib import Path
 from typing import BinaryIO, Callable, Tuple, TypeVar, Union
@@ -15,6 +16,18 @@ _rpm = system_import('rpm')
 # type aliases for comparison functions
 CompareOperator = Callable[[TypeVar('T'), TypeVar('T')], bool]
 CompareResult = Union[bool, type(NotImplemented)]
+
+
+# NEVRA-related regular expressions
+EPOCH_RE = re.compile(r'(\d+):')
+NVRA_re = re.compile(r'''
+    ^
+    (?P<name>\S+)-          # package name
+    (?P<version>[\w.]+)-    # package version
+    (?P<release>\w+(?:\.\w+)+?)  # package release, with required dist tag
+    (?:\.(?P<arch>\w+))?    # optional package architecture
+    $
+''', flags=re.VERBOSE)
 
 
 # Helper for ensuring resolved paths
@@ -41,8 +54,13 @@ class Metadata:
         default=0,
         # special case for None: treat that as 0
         convert=lambda val: 0 if val is None else int(val),
-    )  # noqa: E501
-    arch = attr.ib(validator=optional(instance_of(str)), default='src')
+    )
+
+    arch = attr.ib(
+        validator=optional(instance_of(str)),
+        default='src',
+        convert=lambda val: 'src' if val is None else str(val),
+    )
 
     # Alternative constructors
 
@@ -81,6 +99,35 @@ class Metadata:
             attributes['arch'] = header[_rpm.RPMTAG_ARCH].decode('utf-8')
 
         return cls(**attributes)
+
+    @classmethod
+    def from_nevra(cls, nevra: str) -> 'Metadata':
+        """Parse a string NEVRA and converts it to respective fields.
+
+        Keyword arguments:
+            nevra: The name-epoch:version-release-arch to parse.
+
+        Returns:
+            New instance of Metadata.
+        """
+
+        arguments = {}
+
+        # Extract the epoch, if present
+        def replace_epoch(match):
+            arguments['epoch'] = match.group(1)
+            return ''
+        nvra = EPOCH_RE.sub(replace_epoch, nevra, count=1)
+
+        # Parse the rest of the string
+        match = NVRA_re.match(nvra)
+        if not match:
+            message = 'Invalid NEVRA string: {}'.format(nevra)
+            raise ValueError(message)
+
+        arguments.update(match.groupdict())
+
+        return cls(**arguments)
 
     # Derived attributes
 
