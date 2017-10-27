@@ -75,7 +75,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'rpmrh=rpmrh.cli:main',
+            'rpmrh=rpmrh.cli.command:main',
         ],
     },
 )
