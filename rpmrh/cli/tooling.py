@@ -1,5 +1,6 @@
 """Additional CLI-specific tooling"""
 
+from typing import Iterator
 
 import attr
 from attr.validators import optional, instance_of
@@ -52,3 +53,14 @@ class PackageStream:
         validator=instance_of(frozenset),
         convert=frozenset,
     )
+
+    def __iter__(self):
+        """Iterate over the packages in deterministic manner."""
+
+        yield from sorted(self._container)
+
+    @classmethod
+    def consume(cls, iterator: Iterator[Package]):
+        """Create a new Stream by consuming a Package iterator."""
+
+        return cls(iterator)
