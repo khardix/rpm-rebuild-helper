@@ -56,7 +56,6 @@ def load_configuration(
         )
 
         for section, values in section_iter:
-            print(section, values, sep=': ')
             result[section].maps.append(values)
 
     return result

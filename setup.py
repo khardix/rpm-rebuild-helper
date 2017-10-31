@@ -71,6 +71,7 @@ setup(
     package_data={
         'rpmrh': [
             'conf.d/*.service.toml',  # Included service configurations
+            'conf.d/config.toml',  # Main application configuration
         ],
     },
     entry_points={

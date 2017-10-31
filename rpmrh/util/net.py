@@ -1,6 +1,6 @@
 """Utilities for network calls."""
 
-from typing import Optional
+from typing import Optional, Union
 
 import requests
 from requests_file import FileAdapter
@@ -31,3 +31,34 @@ def default_requests_session(session: Optional[requests.Session] = None):
     session.mount('file://', FileAdapter())
 
     return session
+
+
+def fetch(
+    url: str,
+    *,
+    encoding: Optional[str] = None,
+    session: Optional[requests.Session] = None,
+) -> Union[str, bytes]:
+    """Fetch contents of a remote file.
+
+    Keyword arguments:
+        url: The URL of the file to retrieve.
+        encoding: The file encoding to use.
+            If None (default), returns the binary representation of the file.
+            If specified, the contents are decoded to string.
+        session: The requests.Session to use for downloading.
+
+    Returns:
+        The contents of the file.
+    """
+
+    session = default_requests_session(session)
+
+    response = session.get(url)
+    response.raise_for_status()
+
+    if encoding is None:
+        return response.content
+
+    response.encoding = encoding
+    return response.text

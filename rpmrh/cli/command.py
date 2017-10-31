@@ -43,6 +43,11 @@ util.logging.basic_config(logger)
     help='Name of the SCL to work with (can be used multiple times).'
 )
 @click.option(
+    '--all-collections', '--all', 'all_collections',
+    is_flag=True, default=False,
+    help='Process all non-EOL collections for each EL version.'
+)
+@click.option(
     '--report', type=click.File(mode='w', encoding='utf-8'),
     default='-',
     help='File name of the final report [default: stdout].',
@@ -66,6 +71,7 @@ def run_chain(
     context,
     processor_seq,
     collection_seq,
+    all_collections,
     el_seq,
     report,
     **_config_options,
@@ -75,20 +81,33 @@ def run_chain(
     Keyword arguments:
         processor_seq: The callables to apply to the collection sequence.
         collection_seq: The sequence of SCL names to be processed.
+        all_collections: Override collection_seq by all non-EOL collections
+            for each EL version.
         el_seq: The sequence of EL versions to be processed.
         report: The file to write the result report into.
     """
 
+    main_config = context.obj.main_config
+
     # Create placeholders for all collections and EL versions
-    stream = PackageStream(
-        Package(*pair) for pair in product(el_seq, collection_seq)
-    )
+    if all_collections:
+        session = util.net.default_requests_session()
+        packages = []
+        for el in el_seq:
+            url = main_config['remote']['collection-list'].format(el=el)
+            content = util.net.fetch(url, encoding='ascii', session=session)
+            lines = filter(lambda l: 'EOL' not in l, content.splitlines())
+            collections = (l.strip() for l in lines)
+            packages += (Package(el, scl) for scl in collections)
+
+    else:
+        packages = [Package(*pair) for pair in product(el_seq, collection_seq)]
 
     # Apply the processors
     pipeline = reduce(
         lambda data, proc: proc(data),
         processor_seq,
-        stream
+        PackageStream(packages),
     )
 
     # Output the results in YAML format
@@ -100,6 +119,8 @@ def run_chain(
 def diff(collection_stream):
     """List all packages from source tag missing in destination tag."""
 
+    log = logger.getChild('diff')
+
     for scl in collection_stream:
         destination_builds = partial(
             scl.destination.service.latest_builds,
@@ -109,6 +130,8 @@ def diff(collection_stream):
             scl.source.service.latest_builds,
             scl.source.label,
         )
+
+        log.info('Comparing {p.collection}-el{p.el}'.format(p=scl))
 
         # Packages present in destination
         present = {
