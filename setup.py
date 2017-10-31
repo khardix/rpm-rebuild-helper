@@ -44,7 +44,7 @@ DEPENDENCIES = [
     'requests',
     'requests-file',
     'ruamel.yaml<=0.15',
-    'toml',
+    'pytoml',
 ]
 
 TEST_DEPENDENCIES = [  # only for pytest-runner!
