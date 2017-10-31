@@ -100,6 +100,8 @@ def run_chain(
 def diff(collection_stream):
     """List all packages from source tag missing in destination tag."""
 
+    log = logger.getChild('diff')
+
     for scl in collection_stream:
         destination_builds = partial(
             scl.destination.service.latest_builds,
@@ -109,6 +111,8 @@ def diff(collection_stream):
             scl.source.service.latest_builds,
             scl.source.label,
         )
+
+        log.info('Comparing {p.collection}-el{p.el}'.format(p=scl))
 
         # Packages present in destination
         present = {
