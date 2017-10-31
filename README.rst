@@ -13,16 +13,17 @@ among other things.
 Usage example
 -------------
 
-Compare released packages between two build services
--- Fedora's Koji and CentOS CBS --
-for a `python34` software collection::
+Compare packages between two tags, to find out which packages in `rh-python36`
+collection needs to be tested in CentoOS 7::
 
-   rpmrh diff --from koji --to cbs --collection python34
+   rpmrh \
+        --from sclo-candidate --to sclo-testing \
+        --collection rh-python36 --el 7 \
+        diff
 
-Or for all currently active (released and not End-of-Life) collections::
+Check which packages needs to be tested in all currently supported
+(released and not End-Of-Life) collections for both CentOS 6 and 7::
 
-   rpmrh diff --all --from koji --to cbs
-
-Attempt to automatically rebuild all missing packages::
-
-   rpmrh rebuild --from koji --to cbs --all
+    rpmrh --from sclo-candidate --to sclo-testing \
+        --all-collections --el 6 --el 7 \
+        diff
