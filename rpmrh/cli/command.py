@@ -2,6 +2,7 @@
 
 import logging
 from collections import defaultdict, OrderedDict
+from datetime import timedelta
 from functools import reduce, partial
 from itertools import product
 from operator import attrgetter
@@ -115,11 +116,27 @@ def run_chain(
 
 
 @main.command()
+@click.option(
+    '--min-days', type=click.INT, default=0,
+    help='Minimum age of the build in destination to qualify for the check.',
+)
 @stream_generator(source='tag', destination='tag')
-def diff(collection_stream):
+def diff(collection_stream, min_days):
     """List all packages from source tag missing in destination tag."""
 
     log = logger.getChild('diff')
+
+    def old_enough(package):
+        if not hasattr(package, 'age'):
+            msg = (
+                'Package {!s} does not provide age information;'
+                ' assuming it is old enough.'
+            )
+            log.warning(msg.format(package))
+
+            return True
+
+        return package.age >= timedelta(days=min_days)
 
     for scl in collection_stream:
         destination_builds = partial(
@@ -152,7 +169,9 @@ def diff(collection_stream):
             and not obsolete(pkg)
         )
 
-        yield from (attr.evolve(scl, metadata=package) for package in missing)
+        ready = filter(old_enough, missing)
+
+        yield from (attr.evolve(scl, metadata=package) for package in ready)
 
 
 @main.command()
