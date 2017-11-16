@@ -2,7 +2,7 @@
 
 import logging
 from collections import defaultdict, OrderedDict
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 from functools import reduce, partial
 from itertools import product
 from operator import attrgetter
@@ -126,18 +126,6 @@ def diff(collection_stream, min_days):
 
     log = logger.getChild('diff')
 
-    def old_enough(package):
-        if not hasattr(package, 'age'):
-            msg = (
-                'Package {!s} does not provide age information;'
-                ' assuming it is old enough.'
-            )
-            log.warning(msg.format(package))
-
-            return True
-
-        return package.age >= timedelta(days=min_days)
-
     for scl in collection_stream:
         destination_builds = partial(
             scl.destination.service.latest_builds,
@@ -169,7 +157,37 @@ def diff(collection_stream, min_days):
             and not obsolete(pkg)
         )
 
-        ready = filter(old_enough, missing)
+        def old_enough(package):
+            try:
+                entry_time = scl.source.service.tag_entry_time(
+                    tag_name=scl.source.label,
+                    build=package,
+                )
+            except NotImplementedError as err:
+                message = '[{pkg}] {err!s}, skipping.'.format(
+                    pkg=package,
+                    err=err,
+                )
+                log.warning(message)
+
+                return False
+
+            if entry_time is None:
+                message = '[{pkg}] Not present in {source}, skipping.'.format(
+                    pkg=package,
+                    source=scl.source.label,
+                )
+                log.warning(message)
+
+                return False
+
+            age = datetime.now(tz=timezone.utc) - entry_time
+            return age >= timedelta(days=min_days)
+
+        if min_days:
+            ready = filter(old_enough, missing)
+        else:
+            ready = missing
 
         yield from (attr.evolve(scl, metadata=package) for package in ready)
 
