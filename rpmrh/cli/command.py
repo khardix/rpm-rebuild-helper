@@ -2,6 +2,7 @@
 
 import logging
 from collections import defaultdict, OrderedDict
+from datetime import timedelta, datetime, timezone
 from functools import reduce, partial
 from itertools import product
 from operator import attrgetter
@@ -115,8 +116,12 @@ def run_chain(
 
 
 @main.command()
+@click.option(
+    '--min-days', type=click.INT, default=0,
+    help='Minimum age of the build in destination to qualify for the check.',
+)
 @stream_generator(source='tag', destination='tag')
-def diff(collection_stream):
+def diff(collection_stream, min_days):
     """List all packages from source tag missing in destination tag."""
 
     log = logger.getChild('diff')
@@ -152,7 +157,39 @@ def diff(collection_stream):
             and not obsolete(pkg)
         )
 
-        yield from (attr.evolve(scl, metadata=package) for package in missing)
+        def old_enough(package):
+            try:
+                entry_time = scl.source.service.tag_entry_time(
+                    tag_name=scl.source.label,
+                    build=package,
+                )
+            except NotImplementedError as err:
+                message = '[{pkg}] {err!s}, skipping.'.format(
+                    pkg=package,
+                    err=err,
+                )
+                log.warning(message)
+
+                return False
+
+            if entry_time is None:
+                message = '[{pkg}] Not present in {source}, skipping.'.format(
+                    pkg=package,
+                    source=scl.source.label,
+                )
+                log.warning(message)
+
+                return False
+
+            age = datetime.now(tz=timezone.utc) - entry_time
+            return age >= timedelta(days=min_days)
+
+        if min_days:
+            ready = filter(old_enough, missing)
+        else:
+            ready = missing
+
+        yield from (attr.evolve(scl, metadata=package) for package in ready)
 
 
 @main.command()

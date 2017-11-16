@@ -4,8 +4,8 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from itertools import groupby
-from operator import attrgetter
+from itertools import groupby, starmap
+from operator import attrgetter, itemgetter
 from pathlib import Path
 from typing import Iterator, Mapping, Optional, Set
 
@@ -75,6 +75,9 @@ class BuiltPackage(rpm.Metadata):
         Returns:
             New BuiltPackage instance for the original metadata.
         """
+
+        if isinstance(original, cls):  # already downcasted
+            return original
 
         raw_data = service.session.getBuild(attr.asdict(original))
         return cls.from_mapping(raw_data)
@@ -169,11 +172,39 @@ class Service(abc.Repository, abc.Builder):
         """
 
         build_list = self.session.listTagged(tag_name)
-        build_list = map(BuiltPackage.from_mapping, build_list)
-        build_groups = groupby(sorted(build_list), key=attrgetter('name'))
+        build_iter = map(BuiltPackage.from_mapping, build_list)
+        build_groups = groupby(sorted(build_iter), key=attrgetter('name'))
+        latest_iter = starmap(lambda _name, group: max(group), build_groups)
 
-        for _name, group in build_groups:
-            yield max(group)
+        yield from latest_iter
+
+    def tag_entry_time(
+        self,
+        tag_name: str,
+        build: rpm.Metadata,
+    ) -> Optional[datetime]:
+        """Determine the entry time of a build into a tag.
+
+        Keyword arguments:
+            tag_name: Name of the tag to query.
+            build: The metadata of the build in question.
+
+        Returns:
+            The date and time the build entered into the tag.
+            If the build is not present within the tag, returns None.
+        """
+
+        # Ensure the build has an ID
+        build = BuiltPackage.from_metadata(self, build)
+
+        # Fetch tag history for this build, and extract latest entry time
+        history = self.session.tagHistory(tag=tag_name, build=build.id)
+        timestamp = max(map(itemgetter('create_ts'), history), default=None)
+
+        if timestamp is None:
+            return None
+        else:
+            return datetime.fromtimestamp(timestamp, tz=timezone.utc)
 
     # Tasks
 
