@@ -1,6 +1,7 @@
 """Test communication with a koji build service"""
 
 from configparser import ConfigParser
+from datetime import datetime, timezone
 from itertools import groupby
 from operator import attrgetter
 from pathlib import Path
@@ -299,6 +300,32 @@ def test_latest_builds_are_not_obsoletes(service, tag_name):
     ]
 
     assert not obsoletes, '\n' + yaml.dump(obsoletes, default_flow_style=False)
+
+
+def test_tag_entry_time_is_fetched(service, built_package):
+    """Time of entry into the tag is queried correctly."""
+
+    tag_name = 'sclo7-rh-ror50-rh-candidate'
+    expected_time = datetime(
+        year=2017, month=8, day=1,
+        hour=13, minute=54, second=45,
+        tzinfo=timezone.utc,
+    )
+
+    entry_time = service.tag_entry_time(tag_name, built_package)
+
+    # Discard μs differences
+    entry_time = entry_time.replace(microsecond=0)
+
+    assert entry_time == expected_time
+
+
+def test_tag_entry_returns_none_on_missing_build(service, built_package):
+    """None is returned if the package never entered the tag"""
+
+    tag_name = 'sclo7-rh-ror41-rh-candidate'
+
+    assert service.tag_entry_time(tag_name, built_package) is None
 
 
 def test_service_download(service, tmpdir, built_package):

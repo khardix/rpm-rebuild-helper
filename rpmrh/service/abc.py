@@ -2,6 +2,7 @@
 
 from abc import ABCMeta, abstractmethod
 from contextlib import ContextDecorator
+from datetime import datetime
 from pathlib import Path
 from typing import Set, Iterator, Optional
 
@@ -36,6 +37,31 @@ class Repository(metaclass=ABCMeta):
         Yields:
             Metadata for all latest builds within the tag.
         """
+
+    def tag_entry_time(
+        self,
+        tag_name: str,
+        build: rpm.Metadata,
+    ) -> Optional[datetime]:
+        """Determine the entry time of a build into a tag.
+
+        Keyword arguments:
+            tag_name: Name of the tag to query.
+            build: The metadata of the build in question.
+
+        Returns:
+            The date and time the build entered into the tag.
+            If the build is not present within the tag, returns None.
+
+        Raises:
+            NotImplementedError:
+                Entry time query is not supported on this repository type.
+        """
+
+        message = 'Tag entry time query unsupported by {class_name}'
+        raise NotImplementedError(message.format(
+            class_name=type(self).__name__,
+        ))
 
     @abstractmethod
     def download(
