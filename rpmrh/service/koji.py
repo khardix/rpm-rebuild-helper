@@ -3,15 +3,15 @@
 import logging
 import os
 import time
-from datetime import datetime, timezone, timedelta
-from itertools import groupby, starmap, chain
-from operator import attrgetter, itemgetter
+from datetime import datetime, timezone
+from itertools import groupby
+from operator import attrgetter
 from pathlib import Path
 from typing import Iterator, Mapping, Optional, Set
 
 import attr
 import requests
-from attr.validators import instance_of, optional
+from attr.validators import instance_of
 from click import style
 
 from . import abc
@@ -34,12 +34,6 @@ class BuiltPackage(rpm.Metadata):
 
     #: Unique identification of a build within the service
     id = attr.ib(validator=instance_of(int), convert=int, default=None)
-
-    #: Timestamp of the build's entry into a tag
-    tag_entry = attr.ib(
-        default=None,
-        validator=optional(instance_of(datetime)),
-    )
 
     @classmethod
     def from_mapping(cls, raw_data: Mapping) -> 'BuiltPackage':
@@ -84,16 +78,6 @@ class BuiltPackage(rpm.Metadata):
 
         raw_data = service.session.getBuild(attr.asdict(original))
         return cls.from_mapping(raw_data)
-
-    @property
-    def age(self) -> timedelta:
-        """The time the build spent in a tag."""
-
-        if self.tag_entry is None:
-            return None
-
-        now = datetime.now(tz=timezone.utc)
-        return now - self.tag_entry
 
 
 @service.register('koji', initializer='from_config_profile')
@@ -184,30 +168,12 @@ class Service(abc.Repository, abc.Builder):
             Metadata for the latest builds in the specified tag.
         """
 
-        # Fetch raw metadata, convert and pick latest
         build_list = self.session.listTagged(tag_name)
-        build_iter = map(BuiltPackage.from_mapping, build_list)
-        build_groups = groupby(sorted(build_iter), key=attrgetter('name'))
-        latest_iter = starmap(lambda _name, group: max(group), build_groups)
+        build_list = map(BuiltPackage.from_mapping, build_list)
+        build_groups = groupby(sorted(build_list), key=attrgetter('name'))
 
-        latest_list = list(latest_iter)
-
-        # Fetch tag history for each build
-        self.session.multicall = True
-        for build in latest_list:
-            self.session.tagHistory(tag=tag_name, build=build.id)
-        history_iter = map(
-            lambda history: max(history, key=itemgetter('create_ts')),
-            chain.from_iterable(self.session.multiCall()),
-        )
-
-        for build, tag_event in zip(latest_list, history_iter):
-            entry_ts = datetime.fromtimestamp(
-                tag_event['create_ts'],
-                tz=timezone.utc,
-            )
-
-            yield attr.evolve(build, tag_entry=entry_ts)
+        for _name, group in build_groups:
+            yield max(group)
 
     # Tasks
 

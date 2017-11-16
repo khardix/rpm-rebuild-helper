@@ -1,9 +1,7 @@
 """Test communication with a koji build service"""
 
 from configparser import ConfigParser
-from datetime import datetime, timedelta, timezone
 from itertools import groupby
-from math import floor
 from operator import attrgetter
 from pathlib import Path
 from textwrap import dedent
@@ -257,7 +255,7 @@ def test_service_from_profile_name(configuration_file):
     'sclo7-nginx16-rh-candidate':
         {'nginx16-1.2-2.el7', 'nginx16-nginx-1.6.2-3.el7'},
     'sclo6-rh-nginx110-rh-candidate':
-        {'rh-nginx110-1.10-8.el6', 'rh-nginx110-nginx-1.10.2-8.el6'},
+        {'rh-nginx110-1.10-3.el6', 'rh-nginx110-nginx-1.10.2-2.el6'},
 }.items())
 def test_service_latest_builds(service, tag_name, expected_nvr_set):
     """Latest builds are properly extracted from the service"""
@@ -332,20 +330,3 @@ def test_existing_package_build_raises(build_service, existing_package):
 
     with pytest.raises(BuildFailure):
         build_service.build('test', existing_package)
-
-
-def test_simple_build_has_no_age(built_package):
-    """A BuiltPackage with no preprocessing has no age."""
-
-    assert built_package.age is None
-
-
-@pytest.mark.parametrize('age', [timedelta(hours=1), timedelta(days=42)])
-def test_package_reports_expected_age(built_package, age):
-    """Built package reports its age correctly"""
-
-    now = datetime.now(tz=timezone.utc)
-    package = attr.evolve(built_package, tag_entry=now-age)
-
-    # Discard microsecond differences -- depends on the speed of this test
-    assert floor(package.age.total_seconds()) == floor(age.total_seconds())
