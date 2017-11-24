@@ -255,3 +255,19 @@ def build(package_stream, fail_file):
         stream=fail_file,
         default_flow_style=False,
     )
+
+
+@main.command()
+@click.option(
+    '--owner',
+    default=None,
+    help='Name of the owner for new packages in tag.',
+)
+@stream_processor(destination='tag')
+def tag(package_stream, owner):
+    """Tag builds to target."""
+
+    for pkg in package_stream:
+        with pkg.destination.service as repo:
+            tagged = repo.tag_build(pkg.destination.label, pkg.metadata)
+            yield attr.evolve(pkg, metadata=tagged)

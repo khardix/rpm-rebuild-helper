@@ -11,7 +11,7 @@ from typing import Iterator, Mapping, Optional, Set
 
 import attr
 import requests
-from attr.validators import instance_of
+from attr.validators import instance_of, optional
 from click import style
 
 from . import abc
@@ -109,6 +109,12 @@ class Service(abc.Repository, abc.Builder):
         validator=instance_of(Set),
         convert=set,
         default=attr.Factory(set),
+    )
+
+    #: Owner to use when adding packages to tag
+    default_owner = attr.ib(
+        validator=optional(instance_of(str)),
+        default=None,
     )
 
     # Dynamic defaults
@@ -261,6 +267,45 @@ class Service(abc.Repository, abc.Builder):
 
         return rpm.LocalPackage.from_path(target_file_path)
 
+    def tag_build(
+        self,
+        tag_name: str,
+        build_metadata: rpm.Metadata,
+        *,
+        owner: Optional[str] = None,
+    ) -> rpm.Metadata:
+        """Add an existing build to a new tag.
+
+        Keyword arguments:
+            tag_name: Name of the tag to which the build should be added.
+            build_metadata: Description of the build to tag.
+            owner: The name of the owner of new package in the tag.
+
+        Returns:
+            Metadata of the tagged build.
+
+        Raises:
+            ValueError: tag_name does not name any tag handled by this
+                instance.
+            ValueError: build_metadata describes a build not existing
+                within this instance.
+        """
+
+        # Ensure that the package is in the package list
+        self.session.packageListAdd(
+            tag_name,
+            build_metadata.name,
+            owner=owner if owner is not None else self.default_owner,
+        )
+
+        # Create the task
+        task_id = self.session.tagBuild(tag_name, build_metadata.nvr)
+
+        # Wait for the task to finish
+        self.__watch_task(task_id, silent=True, poll_interval=3)
+
+        return build_metadata
+
     def __query_target(self, target_name: str) -> dict:
         """Queries the service for information on a target.
 
@@ -336,7 +381,8 @@ class Service(abc.Repository, abc.Builder):
         task_id: int,
         poll_interval: int,
         *,
-        built_package: Optional[rpm.Metadata] = None
+        built_package: Optional[rpm.Metadata] = None,
+        silent: bool = False,
     ) -> int:
         """Watch a task until its end.
 
@@ -345,6 +391,7 @@ class Service(abc.Repository, abc.Builder):
             poll_interval: Interval (in seconds) of task state queries.
             built_package: Metadata of the package being built
                 (for more informative log messages).
+            silent: If True, suppress logging output.
 
         Returns:
             A numeric identification of final task state (koji.TASK_STATES).
@@ -358,6 +405,9 @@ class Service(abc.Repository, abc.Builder):
 
         def log_state(task_info: Mapping) -> None:
             """Log current task state."""
+
+            if silent:
+                return
 
             COLORS = {
                 'FREE': dict(fg='cyan'),
