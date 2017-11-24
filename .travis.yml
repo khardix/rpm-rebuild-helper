@@ -1,0 +1,15 @@
+sudo: required
+
+services:
+  - docker
+
+language: python
+
+matrix:
+  - BASE_OS='fedora:27' INSTALLER='dnf'
+
+before_script:
+  - sed "s/@BASE_OS@/${BASE_OS}/" Dockerfile.in >Dockerfile
+  - docker build -t "rpmrh/${BASE_OS}" --build-arg installer="$INSTALLER" .
+
+script: docker run --rm -t "rpmrh/${BASE_OS}"

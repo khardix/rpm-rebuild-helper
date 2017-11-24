@@ -1,0 +1,12 @@
+FROM @BASE_OS@
+
+ARG installer=dnf
+RUN ${installer} -y install \
+        which git rpm-build \
+        python3{,-pip,-rpm,-koji,-dnf,-createrepo_c}
+RUN python3 -m pip install pipenv
+
+WORKDIR /code
+COPY . .
+RUN pipenv install --three --system --deploy --dev
+ENTRYPOINT ["/usr/bin/python3", "setup.py", "test"]
