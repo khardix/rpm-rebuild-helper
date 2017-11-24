@@ -2,13 +2,15 @@
 
 from configparser import ConfigParser
 from datetime import datetime, timezone
-from itertools import groupby
+from itertools import groupby, chain
 from operator import attrgetter
 from pathlib import Path
 from textwrap import dedent
 
 import attr
+import koji as _koji
 import pytest
+from pytrie import StringTrie
 from ruamel import yaml
 
 from rpmrh import rpm
@@ -38,11 +40,11 @@ class MockBuilder:
     tasks = {
         hash('OK'): {
             'id': hash('OK'),
-            'state': koji.koji.TASK_STATES['CLOSED'],
+            'state': _koji.TASK_STATES['CLOSED'],
         },
         hash('FAIL'): {
             'id': hash('FAIL'),
-            'state': koji.koji.TASK_STATES['FAILED'],
+            'state': _koji.TASK_STATES['FAILED'],
         },
     }
 
@@ -79,6 +81,92 @@ class MockBuilder:
     def getTaskResult(self, task_id):
         assert task_id == hash('FAIL')
         raise koji.koji.GenericError('Already built')
+
+
+@attr.s(slots=True)
+class MockMutableRepo:
+    """Mocked mutable repo koji functionality"""
+
+    #: Tag name -> package name -> package nvr set
+    content = attr.ib()
+
+    @content.default
+    def initial_tags(self):
+        return {
+            'build_tag': StringTrie(),
+            'test_tag': StringTrie(),
+        }
+
+    @property
+    def _existing_packages(self) -> frozenset:
+        """All packages existing in this instance"""
+
+        return frozenset(chain.from_iterable(
+            tag_content.keys() for tag_content in self.content.values()
+        ))
+
+    @property
+    def _existing_builds(self) -> frozenset:
+        """All builds in this instance"""
+
+        return frozenset(chain.from_iterable(
+            package_map
+            for tag_content in self.content.values()
+            for package_map in tag_content.values()
+        ))
+
+    def _raise_for_tag(self, tag_name: str):
+        """Raise exception on nonexistent tag"""
+
+        if tag_name not in self.content.keys():
+            raise _koji.GenericError('Wrong target tag: {}'.format(tag_name))
+
+    @staticmethod
+    def getTaskInfo(task_id):
+        """Task always finished"""
+        return {'id': task_id, 'state': _koji.TASK_STATES['CLOSED']}
+
+    def packageListAdd(
+        self,
+        taginfo: str,
+        pkginfo: str,
+        owner=None,
+        *_args,
+        **_kwargs,
+    ) -> None:
+        """Add package to tag listing"""
+
+        # Tag and package must exist
+        self._raise_for_tag(taginfo)
+        if pkginfo not in self._existing_packages:
+            raise _koji.GenericError('Wrong package: {}'.format(pkginfo))
+
+        # No-op if package already in the list
+        if pkginfo in self.content[taginfo].keys():
+            return
+
+        # Adding - owner must be set
+        if owner is None:
+            raise _koji.GenericError('Owner not set')
+
+        self.content[taginfo][pkginfo] = set()
+
+    def tagBuild(self, tag: str, build: str, *_args, **_kwargs) -> int:
+        """Add build to tag"""
+
+        # Tag and build must exist
+        self._raise_for_tag(tag)
+        if build not in self._existing_builds:
+            raise _koji.GenericError('Missing build: {}'.format(build))
+
+        metadata = rpm.Metadata.from_nevra(build)
+
+        # Package must be in the list
+        if metadata.name not in self.content[tag].keys():
+            raise _koji.GenericError('Package not in list for {}'.format(tag))
+
+        self.content[tag][metadata.name].add(build)
+        return 42  # dummy task id
 
 
 @pytest.fixture
@@ -167,6 +255,20 @@ def build_service(service):
     attr.set_run_validators(True)
 
     return build_service
+
+
+@pytest.fixture
+def mutable_repo_service(service, built_package):
+    """Service with mocked session for MutableRepo testing"""
+
+    basic_state = MockMutableRepo()
+    basic_state.content['build_tag'][built_package.name] = {built_package.nvr}
+
+    attr.set_run_validators(False)
+    mock_service = attr.evolve(service, session=basic_state)
+    attr.set_run_validators(True)
+
+    return mock_service
 
 
 @pytest.fixture
@@ -357,3 +459,12 @@ def test_existing_package_build_raises(build_service, existing_package):
 
     with pytest.raises(BuildFailure):
         build_service.build('test', existing_package)
+
+
+def test_existing_build_can_be_tagged(mutable_repo_service, built_package):
+    """Package existing in the repo can be tagged"""
+
+    mutable_repo_service.tag_build('test_tag', built_package, owner='testuser')
+    state = mutable_repo_service.session.content
+
+    assert built_package.name in state['test_tag']
