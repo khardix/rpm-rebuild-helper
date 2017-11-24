@@ -1,6 +1,14 @@
 RPM Rebuild Helper
 ==================
 
+.. image:: https://img.shields.io/travis/khardix/rpm-rebuild-helper.svg
+    :alt: Travis CI Status
+    :target: https://travis-ci.org/khardix/rpm-rebuild-helper
+
+.. image:: https://img.shields.io/pypi/v/rpmrh.svg
+    :alt: PyPI release
+    :target: https://pypi.python.org/pypi/rpmrh
+
 The RPM Rebuild Helper (or `rpmrh` for short)
 is an automation tool for rebuilding sets of (S)RPM files.
 Its main focus are `Software Collections <https://softwarecollections.org>`_.
