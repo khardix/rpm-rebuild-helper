@@ -5,7 +5,7 @@ services:
 
 language: python
 
-matrix:
+env:
   - BASE_OS='fedora:27' INSTALLER='dnf'
 
 before_script:
