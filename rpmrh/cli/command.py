@@ -27,6 +27,10 @@ util.logging.basic_config(logger)
 @click.group(chain=True)
 @util.logging.quiet_option(logger)
 @click.option(
+    '--input', '-i', 'input_file', type=click.File(),
+    help='YAML file with input data (or - for standard input).'
+)
+@click.option(
     '--from', '-f', 'source',
     help='Name of a source group (tag, target, ...).'
 )
@@ -71,6 +75,7 @@ def main(context, source, destination, **_options):
 def run_chain(
     context,
     processor_seq,
+    input_file,
     collection_seq,
     all_collections,
     el_seq,
@@ -100,15 +105,22 @@ def run_chain(
             lines = filter(lambda l: 'EOL' not in l, content.splitlines())
             collections = (l.strip() for l in lines)
             packages += (Package(el, scl) for scl in collections)
+        package_stream = PackageStream(packages)
+
+    # Load packages from YAML
+    elif input_file:
+        package_stream = PackageStream.from_yaml(input_file)
 
     else:
-        packages = [Package(*pair) for pair in product(el_seq, collection_seq)]
+        package_stream = PackageStream(
+            [Package(*pair) for pair in product(el_seq, collection_seq)]
+        )
 
     # Apply the processors
     pipeline = reduce(
         lambda data, proc: proc(data),
         processor_seq,
-        PackageStream(packages),
+        package_stream,
     )
 
     # Output the results in YAML format

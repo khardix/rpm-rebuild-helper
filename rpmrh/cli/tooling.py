@@ -135,15 +135,8 @@ class PackageStream:
 
         if isinstance(structure_or_stream, Mapping):
             structure = structure_or_stream
-
-        elif isinstance(structure_or_stream, (TextIO, str)):
-            structure = yaml.safe_load(structure_or_stream)
-
         else:
-            message = 'Unsupported value type: {}'.format(
-                type(structure_or_stream)
-            )
-            raise ValueError(message)
+            structure = yaml.safe_load(structure_or_stream)
 
         return cls(
             Package(
