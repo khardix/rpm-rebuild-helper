@@ -28,6 +28,13 @@ NVRA_re = re.compile(r'''
     (?:\.(?P<arch>\w+))?    # optional package architecture
     $
 ''', flags=re.VERBOSE)
+# .el7_4 format
+LONG_DIST_RE = re.compile(r'''
+    (\.         # short dist tag starts with a dot…
+    [^\W\d_]+   # … followed by at least one letter…
+    \d+)        # … and ended by at least one digit
+    [^.]*  # any other characters up to the next dot
+''', flags=re.VERBOSE)
 
 
 # Helper for ensuring resolved paths
@@ -257,3 +264,8 @@ def shorten_dist_tag(metadata: Metadata) -> Metadata:
     Returns:
         Potentially modified metadata.
     """
+
+    return attr.evolve(
+        metadata,
+        release=LONG_DIST_RE.sub(r'\1', metadata.release),
+    )
