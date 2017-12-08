@@ -24,7 +24,7 @@ NVRA_re = re.compile(r'''
     ^
     (?P<name>\S+)-          # package name
     (?P<version>[\w.]+)-    # package version
-    (?P<release>\w+(?:\.\w+)+?)  # package release, with required dist tag
+    (?P<release>\w+(?:\.[\w+]+)+?)  # package release, with required dist tag
     (?:\.(?P<arch>\w+))?    # optional package architecture
     $
 ''', flags=re.VERBOSE)
@@ -240,3 +240,20 @@ class LocalPackage(Metadata):
     # String representation
     def __str__(self):
         return self.__fspath__()
+
+
+# Utility functions
+def shorten_dist_tag(metadata: Metadata) -> Metadata:
+    """Shorten release string by removing extra parts of dist tag.
+
+    Examples:
+        abcde-1.0-1.el7_4 → abcde-1.0-1.el7
+        binutils-3.6-4.el8+4 → binutils-3.6-4.el8
+        abcde-1.0-1.fc27 → abcde-1.0-1.fc27
+
+    Keyword arguments:
+        metadata: The metadata to shorten.
+
+    Returns:
+        Potentially modified metadata.
+    """

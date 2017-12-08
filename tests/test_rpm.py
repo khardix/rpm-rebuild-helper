@@ -154,3 +154,17 @@ def test_construction_from_nevra(nevra):
     assert metadata.version == '0.1.0'
     assert metadata.release == '1.fc26'
     assert metadata.arch in {'src', 'x86_64'}
+
+
+@pytest.mark.parametrize('original_nvr,result_nvr', [
+    ('abcde-1.0-1.el7_4', 'abcde-1.0-1.el7'),
+    ('binutils-3.6-4.el8+4', 'binutils-3.6-4.el8'),
+    ('abcde-1.0-1.fc27', 'abcde-1.0-1.fc27'),
+])
+def test_shoten_dist_tag_works(original_nvr, result_nvr):
+    """Ensure that the dist tag is simplified correctly."""
+
+    original = rpm.Metadata.from_nevra(original_nvr)
+    result = rpm.shorten_dist_tag(original)
+
+    assert result.nvr == result_nvr
