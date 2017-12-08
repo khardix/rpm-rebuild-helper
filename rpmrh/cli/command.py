@@ -3,7 +3,7 @@
 import logging
 from collections import defaultdict, OrderedDict
 from datetime import timedelta, datetime, timezone
-from functools import reduce, partial
+from functools import reduce
 from itertools import product
 from operator import attrgetter
 from pathlib import Path
@@ -14,7 +14,7 @@ from ruamel import yaml
 
 from .tooling import Parameters, Package, PackageStream
 from .tooling import stream_processor, stream_generator
-from .. import RESOURCE_ID, util
+from .. import RESOURCE_ID, util, rpm
 from ..service.abc import BuildFailure
 
 
@@ -132,19 +132,21 @@ def run_chain(
     '--min-days', type=click.INT, default=0,
     help='Minimum age of the build in destination to qualify for the check.',
 )
+@click.option(
+    '--simple-dist/--no-simple-dist', default=True,
+    help='Use simple dist tag for comparison (i.e. el7 instead of el7_4).',
+)
 @stream_generator(source='tag', destination='tag')
-def diff(collection_stream, min_days):
+def diff(collection_stream, min_days, simple_dist):
     """List all packages from source tag missing in destination tag."""
 
     log = logger.getChild('diff')
 
     for scl in collection_stream:
-        destination_builds = partial(
-            scl.destination.service.latest_builds,
+        destination_builds = scl.destination.service.latest_builds(
             scl.destination.label,
         )
-        source_builds = partial(
-            scl.source.service.latest_builds,
+        source_builds = scl.source.service.latest_builds(
             scl.source.label,
         )
 
@@ -152,8 +154,8 @@ def diff(collection_stream, min_days):
 
         # Packages present in destination
         present = {
-            build.name: build
-            for build in destination_builds()
+            build.name: rpm.shorten_dist_tag(build) if simple_dist else build
+            for build in destination_builds
             if build.name.startswith(scl.collection)
         }
 
@@ -163,11 +165,11 @@ def diff(collection_stream, min_days):
                 and present[package.name] >= package
             )
 
-        missing = (
-            pkg for pkg in source_builds()
+        missing = {
+            pkg for pkg in source_builds
             if pkg.name.startswith(scl.collection)
-            and not obsolete(pkg)
-        )
+            and not obsolete(rpm.shorten_dist_tag(pkg) if simple_dist else pkg)
+        }
 
         def old_enough(package):
             try:
