@@ -10,6 +10,10 @@ env:
   - BASE_OS='fedora:27' INSTALLER='dnf'
   - BASE_OS='fedora:26' INSTALLER='dnf'
 
+branches:
+  except:
+    - /^experimental/
+
 before_script:
   - sed "s|@BASE_OS@|${BASE_OS}|" Dockerfile.in >Dockerfile
   - docker build -t "rpmrh/$(basename $BASE_OS)" --build-arg installer="$INSTALLER" .
