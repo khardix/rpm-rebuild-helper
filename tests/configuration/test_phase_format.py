@@ -4,7 +4,7 @@ import cerberus
 import pytest
 import toml
 
-from rpmrh.configuration.experimental import phase
+from rpmrh.configuration import phase
 
 
 CONFIGURATION_FILE_CONTENTS = {

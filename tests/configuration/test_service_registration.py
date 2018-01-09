@@ -2,7 +2,7 @@
 
 import pytest
 
-from rpmrh.configuration.experimental import service
+from rpmrh.configuration import service
 
 
 class Service:

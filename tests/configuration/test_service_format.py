@@ -4,7 +4,7 @@ import cerberus
 import pytest
 import toml
 
-from rpmrh.configuration.experimental import service
+from rpmrh.configuration import service
 
 
 CONFIGURATION_FILE_CONTENT = {
