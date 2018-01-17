@@ -45,6 +45,7 @@ def open_resource_files(
     yield from text_streams
 
 
+# TODO: rename -> open_matching_files
 def open_config_files(
     glob: str,
     search_path_seq: Optional[Sequence[Path]] = None,
