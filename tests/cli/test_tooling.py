@@ -4,12 +4,10 @@ from collections import namedtuple
 
 import click
 import pytest
-from pytrie import StringTrie
 from ruamel import yaml
 
 import rpmrh.cli.tooling as tooling
 from rpmrh import rpm
-from rpmrh.configuration import service
 
 
 @pytest.fixture
@@ -43,52 +41,46 @@ def yaml_structure(package_stream):
 
 
 @pytest.fixture
-def instance_registry():
+def phase():
     """Filled test registry"""
 
     Service = namedtuple('Service', ['identification'])
-    index_data = StringTrie(test=Service('simple'))
-    return service.Registry(
-        index={'tag': service.Index('tag', index_data)},
-        alias={'tag': {}},
-    )
+    return {
+        'repo': {'service': Service('simple'), 'tags': ['simple-tag']},
+    }
 
 
-def make_command(function, instance_registry):
+def make_command(function, phase):
     """Turn a function into click Command"""
 
-    context_settings = dict(obj=tooling.Parameters(
-        cli_options={'source': 'test', 'destination': None},
-        main_config={},
-        service_registry=instance_registry,
-    ))
+    context_settings = dict(obj={'source': phase})
 
     decorator = click.command(context_settings=context_settings)
     return decorator(function)
 
 
 @pytest.fixture
-def process_command(instance_registry):
+def process_command(phase):
     """Dummy click command for tests of stream processing"""
 
     processor = tooling.stream_processor(
         lambda stream: stream,
-        source='tag',
+        source='repo',
     )
 
-    return make_command(processor, instance_registry)
+    return make_command(processor, phase)
 
 
 @pytest.fixture
-def generate_command(instance_registry):
+def generate_command(phase):
     """Dummy click command for tests of stream generation"""
 
     generator = tooling.stream_generator(
         lambda stream: stream,
-        source='tag',
+        source='repo',
     )
 
-    return make_command(generator, instance_registry)
+    return make_command(generator, phase)
 
 
 def test_stream_iteration(package_stream):
@@ -132,7 +124,7 @@ def test_stream_expansion(process_command, package_stream):
     stream = ctx.invoke(process_command)(package_stream)
 
     def valid_package(package):
-        valid_source = package.source.service.identification == 'simple'
+        valid_source = package.source['service'].identification == 'simple'
         valid_destination = package.destination is None
         valid_metadata = package.metadata is not None
 
@@ -148,7 +140,7 @@ def test_stream_generation(generate_command, package_stream):
     stream = list(ctx.invoke(generate_command)(package_stream))
 
     def valid_package(package):
-        source = package.source.service.identification == 'simple'
+        source = package.source['service'].identification == 'simple'
         destination = package.destination is None
         metadata = package.metadata is None
 

@@ -1,21 +1,22 @@
 """Additional CLI-specific tooling"""
 
 from collections import defaultdict
+from contextlib import ExitStack
 from copy import deepcopy
 from functools import partial, wraps
-from itertools import groupby, starmap
+from itertools import groupby, starmap, chain
 from operator import attrgetter, itemgetter
 from typing import Iterator, Optional, Union
 from typing import Mapping, TextIO, Callable
 
 import attr
 import click
+import toml
 from ruamel import yaml
 from attr.validators import optional, instance_of
 
 from .. import rpm
-from ..configuration import service
-from ..configuration.runtime import load_configuration, load_services
+from ..util.filesystem import open_resource_files, open_config_files
 
 
 # Add YAML dump capabilities for python types not supported by default
@@ -23,34 +24,36 @@ YAMLDumper = deepcopy(yaml.SafeDumper)
 YAMLDumper.add_representer(defaultdict, lambda r, d: r.represent_dict(d))
 
 
-@attr.s(slots=True, frozen=True)
-class Parameters:
-    """A structure holding parameters for single application run."""
+def load_configuration(
+    glob: str,
+    *,
+    interpret: Callable[[TextIO], Mapping] = toml.load,
+    validate: Callable[[Mapping], Mapping] = lambda m: m,
+) -> Iterator[Mapping]:
+    """Load configuration contents from both bundled and system files.
 
-    #: Parsed command-line parameters
-    cli_options = attr.ib(validator=instance_of(Mapping))
+    Keyword arguments:
+        glob: File name (NOT path) glob matching the requested files.
+        interpret: Converter from text stream to Python objects.
+            Defaults to toml.load().
+        validate: Validation and normalization of single configuration file.
+            Should raise an exception on validation failure.
+            Defaults to pass-through lambda -- no validation or normalization.
 
-    #: Main configuration values
-    main_config = attr.ib(
-        default=attr.Factory(load_configuration),
-        validator=instance_of(Mapping),
-    )
+    Yields:
+        Interpreted contents of configuration files.
+        The order is from most (user) specific to most generic (bundled) ones.
+    """
 
-    #: Known service registry
-    service_registry = attr.ib(
-        default=attr.Factory(load_services),
-        validator=instance_of(service.Registry),
-    )
+    with ExitStack() as opened:
+        system = map(opened.enter_context, open_config_files(glob))
+        bundle = map(opened.enter_context, open_resource_files('conf.d', glob))
+        streams = chain(system, bundle)
 
+        interpreted = map(interpret, streams)
+        validated = map(validate, interpreted)
 
-@attr.s(slots=True, frozen=True, cmp=False)
-class PackageGroup:
-    """A label and associated service for a group of related packages."""
-
-    #: Group label (tag, target, etc.)
-    label = attr.ib(validator=instance_of(str))
-    #: Associated service interface
-    service = attr.ib()
+        yield from validated
 
 
 @attr.s(slots=True, frozen=True)
@@ -71,13 +74,13 @@ class Package:
     #: The source group for this package
     source = attr.ib(
         default=None,
-        validator=optional(instance_of(PackageGroup)),
+        validator=optional(instance_of(Mapping)),
         cmp=False,
     )
     #: The destination group for this package
     destination = attr.ib(
         default=None,
-        validator=optional(instance_of(PackageGroup)),
+        validator=optional(instance_of(Mapping)),
         cmp=False,
     )
 
@@ -180,19 +183,14 @@ def stream_processor(
         """Construct a closure that adjusts the stream and wraps the command.
         """
 
-        # Need Parameters for the CLI options and service registry
-        parameters = context.find_object(Parameters)
+        parameters = context.ensure_object(dict)
 
         # Prepare the group(s) expansion
         def expand_groups(package: Package) -> Package:
             """Expand all specified groups for the passed package."""
 
             group_map = {
-                option: PackageGroup(*parameters.service_registry.resolve(
-                    name_or_alias=parameters.cli_options[option],
-                    kind=kind,
-                    alias_format_map=attr.asdict(package, recurse=False),
-                ))
+                option: parameters[option][kind]
                 for option, kind in option_kind.items()
             }
 
