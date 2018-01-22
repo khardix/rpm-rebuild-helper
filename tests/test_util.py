@@ -85,7 +85,7 @@ def test_load_pkg_resources_opens_correct_files():
 
     streams = util.open_resource_files(
         root_dir='conf.d',
-        extension='.service.toml',
+        glob='*.service.toml',
     )
 
     contents = [s.read() for s in streams]

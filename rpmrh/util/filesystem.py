@@ -1,5 +1,6 @@
 """Utilities for interacting with file system"""
 
+import fnmatch
 from io import TextIOWrapper
 from itertools import chain
 from pathlib import Path
@@ -13,7 +14,7 @@ from .. import RESOURCE_ID
 
 def open_resource_files(
     root_dir: str,
-    extension: str,
+    glob: str,
     *,
     encoding: str = 'utf-8',
     package: str = RESOURCE_ID
@@ -22,7 +23,7 @@ def open_resource_files(
 
     Keyword arguments:
         root_dir: Path to the resource directory containing the files.
-        extension: Extension of the files that should be opened.
+        glob: The glob specifier matching the files to be opened.
         encoding: File encoding.
         package: The namespace to look for the resources in.
 
@@ -31,12 +32,11 @@ def open_resource_files(
     """
 
     base_names = resource_listdir(package, root_dir)
-    paths = (
-        '/'.join((root_dir, name))
-        for name in base_names
-        if name.endswith(extension)
+    match_names = fnmatch.filter(base_names, glob)
+    binary_streams = (
+        resource_stream(package, '/'.join((root_dir, name)))
+        for name in match_names
     )
-    binary_streams = (resource_stream(package, p) for p in paths)
     text_streams = (
         TextIOWrapper(bs, encoding=encoding)
         for bs in binary_streams
