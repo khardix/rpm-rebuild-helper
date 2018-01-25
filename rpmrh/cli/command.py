@@ -158,9 +158,11 @@ def run_chain(
         package_stream = PackageStream.from_yaml(input_file)
 
     else:
-        package_stream = PackageStream(
-            [Package(*pair) for pair in product(el_seq, collection_seq)]
+        collections = (
+            SCL(el=el, collection=collection)
+            for el, collection in product(el_seq, collection_seq)
         )
+        package_stream = PackageStream(Package(scl=scl) for scl in collections)
 
     # Apply the processors
     pipeline = reduce(
@@ -182,74 +184,75 @@ def run_chain(
     '--simple-dist/--no-simple-dist', default=True,
     help='Use simple dist tag for comparison (i.e. el7 instead of el7_4).',
 )
-@stream_generator(source='tag', destination='tag')
-def diff(collection_stream, min_days, simple_dist):
+@stream_generator(source='repo', destination='repo')
+def diff(package_stream, min_days, simple_dist):
     """List all packages from source tag missing in destination tag."""
 
     log = logger.getChild('diff')
 
-    for scl in collection_stream:
-        destination_builds = scl.destination.service.latest_builds(
-            scl.destination.label,
-        )
-        source_builds = scl.source.service.latest_builds(
-            scl.source.label,
+    # Filter implementations
+    def latest_builds(group):
+        builds = chain.from_iterable(
+            group['service'].latest_builds(tag) for tag in group['tags']
         )
 
-        log.info('Comparing {p.collection}-el{p.el}'.format(p=scl))
+        if simple_dist:
+            return {rpm.shorten_dist_tag(b) for b in builds}
+        else:
+            return builds
+
+    def obsolete(package, target_map):
+        return (
+            package.name in target_map and target_map[package.name] >= package
+        )
+
+    def old_enough(package, source_map):
+        # Attempt to extract tag entry times
+        try:
+            entry_times = (
+                source_map['service'].tag_entry_time(
+                    tag_name=tag,
+                    build=package,
+                )
+                for tag in source_map['tags']
+            )
+        except NotImplementedError as err:
+            message = '[{pkg}] {err!s}, skipping.'.format(
+                pkg=package,
+                err=err,
+            )
+            log.warning(message)
+
+            return False
+
+        # Compare min_days with latest entry time
+        now = datetime.now(tz=timezone.utc)
+        entry_time = max(filter(None, entry_times), default=now)
+        return (now - entry_time) >= timedelta(days=min_days)
+
+    # SCL processing
+    for pkg in package_stream:
+        destination_builds = latest_builds(pkg.destination)
+        source_builds = latest_builds(pkg.source)
+
+        log.info('Comparing {s.collection}-el{s.el}'.format(s=pkg.scl))
 
         # Packages present in destination
         present = {
-            build.name: rpm.shorten_dist_tag(build) if simple_dist else build
+            build.name: build
             for build in destination_builds
-            if build.name.startswith(scl.collection)
+            if build.name.startswith(pkg.scl.collection)
         }
-
-        def obsolete(package):
-            return (
-                package.name in present
-                and present[package.name] >= package
-            )
 
         missing = {
-            pkg for pkg in source_builds
-            if pkg.name.startswith(scl.collection)
-            and not obsolete(rpm.shorten_dist_tag(pkg) if simple_dist else pkg)
+            build for build in source_builds
+            if build.name.startswith(pkg.scl.collection)
+            and not obsolete(build, present)
         }
 
-        def old_enough(package):
-            try:
-                entry_time = scl.source.service.tag_entry_time(
-                    tag_name=scl.source.label,
-                    build=package,
-                )
-            except NotImplementedError as err:
-                message = '[{pkg}] {err!s}, skipping.'.format(
-                    pkg=package,
-                    err=err,
-                )
-                log.warning(message)
+        ready = filter(lambda build: old_enough(build, pkg.source), missing)
 
-                return False
-
-            if entry_time is None:
-                message = '[{pkg}] Not present in {source}, skipping.'.format(
-                    pkg=package,
-                    source=scl.source.label,
-                )
-                log.warning(message)
-
-                return False
-
-            age = datetime.now(tz=timezone.utc) - entry_time
-            return age >= timedelta(days=min_days)
-
-        if min_days:
-            ready = filter(old_enough, missing)
-        else:
-            ready = missing
-
-        yield from (attr.evolve(scl, metadata=package) for package in ready)
+        yield from (attr.evolve(pkg, metadata=package) for package in ready)
 
 
 @main.command()
