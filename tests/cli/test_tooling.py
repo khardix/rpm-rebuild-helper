@@ -21,7 +21,10 @@ def package_stream():
     ]
 
     return tooling.PackageStream(
-        tooling.Package(collection='test', el=7, metadata=m)
+        tooling.Package(
+            scl=tooling.SCL(collection='test', el=7),
+            metadata=m,
+        )
         for m in metadata
     )
 
@@ -33,8 +36,8 @@ def yaml_structure(package_stream):
     structure = {}
 
     for pkg in sorted(package_stream._container):
-        el_map = structure.setdefault(pkg.el, {})
-        scl_list = el_map.setdefault(pkg.collection, [])
+        el_map = structure.setdefault(pkg.scl.el, {})
+        scl_list = el_map.setdefault(pkg.scl.collection, [])
         scl_list.append(str(pkg.metadata))
 
     return structure
