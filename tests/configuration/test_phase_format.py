@@ -9,26 +9,23 @@ from rpmrh.configuration import phase
 
 CONFIGURATION_FILE_CONTENTS = {
     'valid': toml.loads("""\
-        [[initial.repo]]
+        [initial.repo]
         service = 'cbs'
         tags = ['tag']
 
-        [[initial.check]]
+        [initial.check]
         service = 'jenkins'
         tests = ['test', 'other test']
 
         [koji]
-        repo = [ {service = 'koji', tags = ['f27']}, ]
-        build = [
-            {service = 'koji', targets = ['f27-build',]},
-            {service = 'cbs', targets = ['sclo{el}-{collection}-rh-candidate']}
-        ]
+        repo = {service = 'koji', tags = ['f27']}
+        build = {service = 'cbs', targets = ['sclo{el}-{collection}-rh-candidate']}  # noqa: E501
     """),
 
     'empty': {},
 
     'broken': toml.loads("""\
-        [[broken.repo]]
+        [broken.repo]
         service = 'cbs'
         # missing tags
     """),

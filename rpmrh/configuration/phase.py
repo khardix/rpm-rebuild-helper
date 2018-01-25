@@ -9,24 +9,24 @@ SCHEMA = {'phase': {
     'type': 'dict',
     'keyschema': {'type': 'string', 'coerce': str},
     'valueschema': {'type': 'dict', 'schema': {
-        'repo': {'type': 'list', 'schema': {'type': 'dict', 'schema': {
+        'repo': {'type': 'dict', 'schema': {
             'service': {'type': 'string', 'required': True},
             'tags': {
                 'type': 'list', 'required': True, 'schema': {'type': 'string'},
             },
-        }}},
-        'build': {'type': 'list', 'schema': {'type': 'dict', 'schema': {
+        }},
+        'build': {'type': 'dict', 'schema': {
             'service': {'type': 'string', 'required': True},
             'targets': {
                 'type': 'list', 'required': True, 'schema': {'type': 'string'},
             },
-        }}},
-        'check': {'type': 'list', 'schema': {'type': 'dict', 'schema': {
+        }},
+        'check': {'type': 'dict', 'schema': {
             'service': {'type': 'string', 'required': True},
             'tests': {
                 'type': 'list', 'required': True, 'schema': {'type': 'string'},
             },
-        }}},
+        }},
     }},
 }}
 

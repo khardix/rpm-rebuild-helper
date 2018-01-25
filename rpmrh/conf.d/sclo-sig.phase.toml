@@ -1,0 +1,13 @@
+# Phases utilized by CentOS SCLo SIG
+
+[sclo-candidate.repo]
+service = 'cbs'
+tags = ['sclo{el}-{collection}-rh-candidate']
+
+[sclo-candidate.build]
+service = 'cbs'
+targets = ['sclo{el}-{collection}-rh-el{el}']
+
+[sclo-testing.repo]
+service = 'cbs'
+tags = ['sclo{el}-{collection}-rh-testing']
