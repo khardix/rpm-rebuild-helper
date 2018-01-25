@@ -1,20 +1,21 @@
 """Command Line Interface for the package"""
 
 import logging
-from collections import defaultdict, OrderedDict
+from collections import defaultdict, OrderedDict, ChainMap
 from datetime import timedelta, datetime, timezone
 from functools import reduce
-from itertools import product
+from itertools import product, chain
 from operator import attrgetter
 from pathlib import Path
+from typing import Iterator
 
 import attr
 import click
 from ruamel import yaml
 
-from .tooling import Parameters, Package, PackageStream
-from .tooling import stream_processor, stream_generator
-from .. import RESOURCE_ID, util, rpm
+from .tooling import SCL, Package, PackageStream
+from .tooling import load_configuration, stream_processor, stream_generator
+from .. import RESOURCE_ID, util, rpm, configuration
 from ..service.abc import BuildFailure
 
 
@@ -24,7 +25,7 @@ util.logging.basic_config(logger)
 
 
 # Commands
-@click.group(chain=True)
+@click.group(chain=True, invoke_without_command=True)
 @util.logging.quiet_option(logger)
 @click.option(
     '--input', '-i', 'input_file', type=click.File(),
@@ -63,11 +64,52 @@ def main(context, source, destination, **_options):
     with focus on Software Collections.
     """
 
-    # Store configuration
-    context.obj = Parameters(cli_options={
-        'source': source,
-        'destination': destination,
-    })
+    log = logger.getChild('main_setup')
+
+    # Load configured phases
+    phase = ChainMap(
+        *load_configuration(
+            glob='*.phase.toml',
+            validate=configuration.phase.validate,
+        ),
+    )
+
+    # Load service configuration
+    service_conf = ChainMap(*load_configuration(
+        glob='*.service.toml',
+        validate=configuration.service.validate,
+    ))
+    service = {
+        name: configuration.service.make_instance(conf)
+        for name, conf in service_conf.items()
+    }
+
+    # Fill configuration dictionary
+    context.obj = ChainMap(*load_configuration('config.toml'))
+    log.debug('configuration:', dict(context.obj))
+
+    def extract_services(phase_name: str) -> dict:
+        try:
+            skeleton = phase[phase_name]
+        except KeyError as err:
+            message = 'Unknown phase: {!s}'.format(err)
+            raise click.ClickException(message) from None
+
+        try:
+            for kind in skeleton.values():
+                kind['service'] = service[kind['service']]
+        except KeyError as err:
+            message = 'Unknown service: {!s}'.format(err)
+            raise click.ClickException(message) from None
+
+        return skeleton
+
+    if source is not None:
+        context.obj['source'] = extract_services(source)
+        log.debug('source:', source)
+    if destination is not None:
+        context.obj['destination'] = extract_services(destination)
+        log.debug('destination:', destination)
 
 
 @main.resultcallback()
@@ -93,19 +135,23 @@ def run_chain(
         report: The file to write the result report into.
     """
 
-    main_config = context.obj.main_config
+    main_config = context.obj
+
+    def fetch_collection_list(el: int) -> Iterator[SCL]:
+        """Retrieve collection list from configured remote"""
+
+        url = main_config['remote']['collection-list'].format(el=el)
+        content = util.net.fetch(url, encoding='ascii')
+
+        # Filter EOL collections
+        lines = filter(lambda line: 'EOL' not in line, content.splitlines())
+        collections = (line.strip() for line in lines)
+        yield from (SCL(el=el, collection=c) for c in collections)
 
     # Create placeholders for all collections and EL versions
     if all_collections:
-        session = util.net.default_requests_session()
-        packages = []
-        for el in el_seq:
-            url = main_config['remote']['collection-list'].format(el=el)
-            content = util.net.fetch(url, encoding='ascii', session=session)
-            lines = filter(lambda l: 'EOL' not in l, content.splitlines())
-            collections = (l.strip() for l in lines)
-            packages += (Package(el, scl) for scl in collections)
-        package_stream = PackageStream(packages)
+        collections = chain.from_iterable(map(fetch_collection_list, el_seq))
+        package_stream = PackageStream(Package(scl=c) for c in collections)
 
     # Load packages from YAML
     elif input_file:
