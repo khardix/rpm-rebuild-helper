@@ -278,7 +278,7 @@ def download(package_stream, output_dir):
         collection_dir.mkdir(exist_ok=True)
 
         log.info('Fetching {}'.format(pkg.metadata))
-        local = pkg.source.service.download(pkg.metadata, collection_dir)
+        local = pkg.source['service'].download(pkg.metadata, collection_dir)
 
         yield attr.evolve(pkg, metadata=local)
 
@@ -293,7 +293,7 @@ def download(package_stream, output_dir):
 def build(package_stream, fail_file):
     """Attempt to build packages in target."""
 
-    failed = defaultdict(defaultdict(set))
+    failed = defaultdict(lambda: defaultdict(set))
 
     for pkg in package_stream:
         with pkg.destination['service'] as builder:
@@ -303,7 +303,7 @@ def build(package_stream, fail_file):
                     built = builder.build(target, pkg.metadata)
                     yield attr.evolve(pkg, metadata=built)
                 except BuildFailure as failure:
-                    failed[pkg.collection][target].add(failure)
+                    failed[pkg.scl.collection][target].add(failure)
 
     if not failed:
         raise StopIteration()
