@@ -1,20 +1,21 @@
 """Command Line Interface for the package"""
 
 import logging
-from collections import defaultdict, OrderedDict
+from collections import defaultdict, OrderedDict, ChainMap
 from datetime import timedelta, datetime, timezone
 from functools import reduce
-from itertools import product
+from itertools import product, chain
 from operator import attrgetter
 from pathlib import Path
+from typing import Iterator
 
 import attr
 import click
 from ruamel import yaml
 
-from .tooling import Parameters, Package, PackageStream
-from .tooling import stream_processor, stream_generator
-from .. import RESOURCE_ID, util, rpm
+from .tooling import SCL, Package, PackageStream
+from .tooling import load_configuration, stream_processor, stream_generator
+from .. import RESOURCE_ID, util, rpm, configuration
 from ..service.abc import BuildFailure
 
 
@@ -24,7 +25,7 @@ util.logging.basic_config(logger)
 
 
 # Commands
-@click.group(chain=True)
+@click.group(chain=True, invoke_without_command=True)
 @util.logging.quiet_option(logger)
 @click.option(
     '--input', '-i', 'input_file', type=click.File(),
@@ -63,11 +64,52 @@ def main(context, source, destination, **_options):
     with focus on Software Collections.
     """
 
-    # Store configuration
-    context.obj = Parameters(cli_options={
-        'source': source,
-        'destination': destination,
-    })
+    log = logger.getChild('main_setup')
+
+    # Load configured phases
+    phase = ChainMap(
+        *load_configuration(
+            glob='*.phase.toml',
+            validate=configuration.phase.validate,
+        ),
+    )
+
+    # Load service configuration
+    service_conf = ChainMap(*load_configuration(
+        glob='*.service.toml',
+        validate=configuration.service.validate,
+    ))
+    service = {
+        name: configuration.service.make_instance(conf)
+        for name, conf in service_conf.items()
+    }
+
+    # Fill configuration dictionary
+    context.obj = ChainMap(*load_configuration('config.toml'))
+    log.debug('configuration:', dict(context.obj))
+
+    def extract_services(phase_name: str) -> dict:
+        try:
+            skeleton = phase[phase_name]
+        except KeyError as err:
+            message = 'Unknown phase: {!s}'.format(err)
+            raise click.ClickException(message) from None
+
+        try:
+            for kind in skeleton.values():
+                kind['service'] = service[kind['service']]
+        except KeyError as err:
+            message = 'Unknown service: {!s}'.format(err)
+            raise click.ClickException(message) from None
+
+        return skeleton
+
+    if source is not None:
+        context.obj['source'] = extract_services(source)
+        log.debug('source:', source)
+    if destination is not None:
+        context.obj['destination'] = extract_services(destination)
+        log.debug('destination:', destination)
 
 
 @main.resultcallback()
@@ -93,28 +135,34 @@ def run_chain(
         report: The file to write the result report into.
     """
 
-    main_config = context.obj.main_config
+    main_config = context.obj
+
+    def fetch_collection_list(el: int) -> Iterator[SCL]:
+        """Retrieve collection list from configured remote"""
+
+        url = main_config['remote']['collection-list'].format(el=el)
+        content = util.net.fetch(url, encoding='ascii')
+
+        # Filter EOL collections
+        lines = filter(lambda line: 'EOL' not in line, content.splitlines())
+        collections = (line.strip() for line in lines)
+        yield from (SCL(el=el, collection=c) for c in collections)
 
     # Create placeholders for all collections and EL versions
     if all_collections:
-        session = util.net.default_requests_session()
-        packages = []
-        for el in el_seq:
-            url = main_config['remote']['collection-list'].format(el=el)
-            content = util.net.fetch(url, encoding='ascii', session=session)
-            lines = filter(lambda l: 'EOL' not in l, content.splitlines())
-            collections = (l.strip() for l in lines)
-            packages += (Package(el, scl) for scl in collections)
-        package_stream = PackageStream(packages)
+        collections = chain.from_iterable(map(fetch_collection_list, el_seq))
+        package_stream = PackageStream(Package(scl=c) for c in collections)
 
     # Load packages from YAML
     elif input_file:
         package_stream = PackageStream.from_yaml(input_file)
 
     else:
-        package_stream = PackageStream(
-            [Package(*pair) for pair in product(el_seq, collection_seq)]
+        collections = (
+            SCL(el=el, collection=collection)
+            for el, collection in product(el_seq, collection_seq)
         )
+        package_stream = PackageStream(Package(scl=scl) for scl in collections)
 
     # Apply the processors
     pipeline = reduce(
@@ -129,81 +177,86 @@ def run_chain(
 
 @main.command()
 @click.option(
-    '--min-days', type=click.INT, default=0,
+    '--min-days', type=click.INT, default=None,
     help='Minimum age of the build in destination to qualify for the check.',
 )
 @click.option(
     '--simple-dist/--no-simple-dist', default=True,
     help='Use simple dist tag for comparison (i.e. el7 instead of el7_4).',
 )
-@stream_generator(source='tag', destination='tag')
-def diff(collection_stream, min_days, simple_dist):
+@stream_generator(source='repo', destination='repo')
+def diff(package_stream, min_days, simple_dist):
     """List all packages from source tag missing in destination tag."""
 
     log = logger.getChild('diff')
 
-    for scl in collection_stream:
-        destination_builds = scl.destination.service.latest_builds(
-            scl.destination.label,
-        )
-        source_builds = scl.source.service.latest_builds(
-            scl.source.label,
+    # Filter implementations
+    def latest_builds(group):
+        builds = chain.from_iterable(
+            group['service'].latest_builds(tag) for tag in group['tags']
         )
 
-        log.info('Comparing {p.collection}-el{p.el}'.format(p=scl))
+        if simple_dist:
+            return {rpm.shorten_dist_tag(b) for b in builds}
+        else:
+            return builds
+
+    def obsolete(package, target_map):
+        return (
+            package.name in target_map and target_map[package.name] >= package
+        )
+
+    def old_enough(package, source_map):
+        # Skip this check if not explicitly requested
+        if min_days is None:
+            return True
+
+        # Attempt to extract tag entry times
+        try:
+            entry_times = [
+                source_map['service'].tag_entry_time(
+                    tag_name=tag,
+                    build=package,
+                )
+                for tag in source_map['tags']
+            ]
+        except NotImplementedError as err:
+            message = '[{pkg}] {err!s}, skipping.'.format(
+                pkg=package,
+                err=err,
+            )
+            log.warning(message)
+
+            return False
+
+        # Compare min_days with latest entry time
+        now = datetime.now(tz=timezone.utc)
+        entry_time = max(filter(None, entry_times), default=now)
+        return (now - entry_time) >= timedelta(days=min_days)
+
+    # SCL processing
+    for pkg in package_stream:
+        destination_builds = latest_builds(pkg.destination)
+        source_builds = latest_builds(pkg.source)
+
+        log.info('Comparing {s.collection}-el{s.el}'.format(s=pkg.scl))
 
         # Packages present in destination
         present = {
-            build.name: rpm.shorten_dist_tag(build) if simple_dist else build
+            build.name: build
             for build in destination_builds
-            if build.name.startswith(scl.collection)
+            if build.name.startswith(pkg.scl.collection)
         }
-
-        def obsolete(package):
-            return (
-                package.name in present
-                and present[package.name] >= package
-            )
 
         missing = {
-            pkg for pkg in source_builds
-            if pkg.name.startswith(scl.collection)
-            and not obsolete(rpm.shorten_dist_tag(pkg) if simple_dist else pkg)
+            build for build in source_builds
+            if build.name.startswith(pkg.scl.collection)
+            and not obsolete(build, present)
         }
 
-        def old_enough(package):
-            try:
-                entry_time = scl.source.service.tag_entry_time(
-                    tag_name=scl.source.label,
-                    build=package,
-                )
-            except NotImplementedError as err:
-                message = '[{pkg}] {err!s}, skipping.'.format(
-                    pkg=package,
-                    err=err,
-                )
-                log.warning(message)
+        ready = filter(lambda build: old_enough(build, pkg.source), missing)
 
-                return False
-
-            if entry_time is None:
-                message = '[{pkg}] Not present in {source}, skipping.'.format(
-                    pkg=package,
-                    source=scl.source.label,
-                )
-                log.warning(message)
-
-                return False
-
-            age = datetime.now(tz=timezone.utc) - entry_time
-            return age >= timedelta(days=min_days)
-
-        if min_days:
-            ready = filter(old_enough, missing)
-        else:
-            ready = missing
-
-        yield from (attr.evolve(scl, metadata=package) for package in ready)
+        yield from (attr.evolve(pkg, metadata=package) for package in ready)
 
 
 @main.command()
@@ -213,7 +266,7 @@ def diff(collection_stream, min_days, simple_dist):
     default='.',
     help='Target directory for downloaded packages [default: "."].'
 )
-@stream_processor(source='tag')
+@stream_processor(source='repo')
 def download(package_stream, output_dir):
     """Download packages into specified directory."""
 
@@ -221,11 +274,11 @@ def download(package_stream, output_dir):
     output_dir = Path(output_dir).resolve()
 
     for pkg in package_stream:
-        collection_dir = output_dir / pkg.collection
+        collection_dir = output_dir / pkg.scl.collection
         collection_dir.mkdir(exist_ok=True)
 
         log.info('Fetching {}'.format(pkg.metadata))
-        local = pkg.source.service.download(pkg.metadata, collection_dir)
+        local = pkg.source['service'].download(pkg.metadata, collection_dir)
 
         yield attr.evolve(pkg, metadata=local)
 
@@ -236,29 +289,35 @@ def download(package_stream, output_dir):
     type=click.File(mode='w', encoding='utf-8', lazy=True),
     help='Path to store build failures to [default: stderr].',
 )
-@stream_processor(destination='target')
+@stream_processor(destination='build')
 def build(package_stream, fail_file):
     """Attempt to build packages in target."""
 
-    failed = defaultdict(set)
+    failed = defaultdict(lambda: defaultdict(set))
 
     for pkg in package_stream:
-        with pkg.destination.service as builder:
-            try:
-                built = builder.build(pkg.destination.label, pkg.metadata)
-                yield attr.evolve(pkg, metadata=built)
-            except BuildFailure as failure:
-                failed[pkg.collection].add(failure)
+        with pkg.destination['service'] as builder:
+            # TODO potentially duplicates packages (one per target!)
+            for target in pkg.destination['targets']:
+                try:
+                    built = builder.build(target, pkg.metadata)
+                    yield attr.evolve(pkg, metadata=built)
+                except BuildFailure as failure:
+                    failed[pkg.scl.collection][target].add(failure)
 
     if not failed:
         raise StopIteration()
 
     # Convert the stored exceptions to readable representation
     readable_failures = {
-        scl: OrderedDict(
-            (f.package.nevra, f.reason)
-            for f in sorted(fails, key=attrgetter('package'))
-        ) for scl, fails in failed.items()
+        scl: {
+            target: OrderedDict(
+                (f.package.nevra, f.reason)
+                for f in sorted(fails, key=attrgetter('package'))
+            )
+            for target, fails in targets.items()
+        }
+        for scl, targets in failed.items()
     }
 
     if fail_file is None:
@@ -277,11 +336,13 @@ def build(package_stream, fail_file):
     default=None,
     help='Name of the owner for new packages in tag.',
 )
-@stream_processor(destination='tag')
+@stream_processor(destination='repo')
 def tag(package_stream, owner):
     """Tag builds to target."""
 
     for pkg in package_stream:
-        with pkg.destination.service as repo:
-            tagged = repo.tag_build(pkg.destination.label, pkg.metadata)
-            yield attr.evolve(pkg, metadata=tagged)
+        with pkg.destination['service'] as repo:
+            # TODO: Potentialy duplicates packages (one per tag!)
+            for tag in pkg.destination['tags']:
+                tagged = repo.tag_build(tag, pkg.metadata)
+                yield attr.evolve(pkg, metadata=tagged)

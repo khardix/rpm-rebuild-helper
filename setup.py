@@ -43,7 +43,7 @@ DEPENDENCIES = [
     'requests',
     'requests-file',
     'ruamel.yaml<=0.15',
-    'pytoml',
+    'toml',
 ]
 
 TEST_DEPENDENCIES = [  # only for pytest-runner!
@@ -70,6 +70,7 @@ setup(
     package_data={
         'rpmrh': [
             'conf.d/*.service.toml',  # Included service configurations
+            'conf.d/*.phase.toml',  # Included phase configurations
             'conf.d/config.toml',  # Main application configuration
         ],
     },

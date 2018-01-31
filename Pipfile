@@ -1,6 +1,8 @@
 [[source]]
+
 url = "https://pypi.python.org/simple"
 verify_ssl = true
+
 
 [packages]
 
@@ -8,15 +10,18 @@ click = "*"
 attrs = ">=17"
 pytrie = "*"
 requests = "*"
-"requests-file" = "*"
+requests-file = "*"
 pyxdg = "*"
 cerberus = "*"
-"click-log" = "*"
+click-log = "*"
 "ruamel.yaml" = "<=0.15"
-pytoml = "*"
+toml = "*"
+
 
 [requires]
+
 python_version = "3.6"
+
 
 [dev-packages]
 

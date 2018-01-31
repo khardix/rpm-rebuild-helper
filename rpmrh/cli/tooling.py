@@ -1,83 +1,104 @@
 """Additional CLI-specific tooling"""
 
+import logging
 from collections import defaultdict
+from contextlib import ExitStack
 from copy import deepcopy
 from functools import partial, wraps
-from itertools import groupby, starmap
+from itertools import groupby, chain
 from operator import attrgetter, itemgetter
 from typing import Iterator, Optional, Union
 from typing import Mapping, TextIO, Callable
 
 import attr
 import click
+import toml
 from ruamel import yaml
 from attr.validators import optional, instance_of
 
 from .. import rpm
-from ..configuration import service
-from ..configuration.runtime import load_configuration, load_services
+from ..util.filesystem import open_resource_files, open_config_files
 
+
+LOG = logging.getLogger(__name__)
 
 # Add YAML dump capabilities for python types not supported by default
 YAMLDumper = deepcopy(yaml.SafeDumper)
 YAMLDumper.add_representer(defaultdict, lambda r, d: r.represent_dict(d))
 
 
+def load_configuration(
+    glob: str,
+    *,
+    interpret: Callable[[TextIO], Mapping] = toml.load,
+    validate: Callable[[Mapping], Mapping] = lambda m: m,
+) -> Iterator[Mapping]:
+    """Load configuration contents from both bundled and system files.
+
+    Keyword arguments:
+        glob: File name (NOT path) glob matching the requested files.
+        interpret: Converter from text stream to Python objects.
+            Defaults to toml.load().
+        validate: Validation and normalization of single configuration file.
+            Should raise an exception on validation failure.
+            Defaults to pass-through lambda -- no validation or normalization.
+
+    Yields:
+        Interpreted contents of configuration files.
+        The order is from most (user) specific to most generic (bundled) ones.
+    """
+
+    with ExitStack() as opened:
+        system = map(opened.enter_context, open_config_files(glob))
+        bundle = map(opened.enter_context, open_resource_files('conf.d', glob))
+        streams = chain(system, bundle)
+
+        interpreted = map(interpret, streams)
+        validated = map(validate, interpreted)
+
+        yield from validated
+
+
+#
+# Data classes
+#
+
 @attr.s(slots=True, frozen=True)
-class Parameters:
-    """A structure holding parameters for single application run."""
+class SCL:
+    """Software collection description"""
 
-    #: Parsed command-line parameters
-    cli_options = attr.ib(validator=instance_of(Mapping))
-
-    #: Main configuration values
-    main_config = attr.ib(
-        default=attr.Factory(load_configuration),
-        validator=instance_of(Mapping),
-    )
-
-    #: Known service registry
-    service_registry = attr.ib(
-        default=attr.Factory(load_services),
-        validator=instance_of(service.Registry),
-    )
-
-
-@attr.s(slots=True, frozen=True, cmp=False)
-class PackageGroup:
-    """A label and associated service for a group of related packages."""
-
-    #: Group label (tag, target, etc.)
-    label = attr.ib(validator=instance_of(str))
-    #: Associated service interface
-    service = attr.ib()
+    #: Collection name
+    collection = attr.ib(validator=instance_of(str))
+    #: EL version of the collection
+    el = attr.ib(validator=instance_of(int))
 
 
 @attr.s(slots=True, frozen=True)
 class Package:
     """Metadata and context of processed package"""
 
-    #: EL version of the package
-    el = attr.ib(validator=instance_of(int))
-    #: The collection to which the package belongs
-    collection = attr.ib(validator=instance_of(str))
+    #: Data of the associated collection
+    scl = attr.ib(validator=instance_of(SCL))
+
     #: RPM metadata of the package
-    #: If None, package acts as a placeholder for an empty collection
     metadata = attr.ib(
-        default=None,
         validator=optional(instance_of(rpm.Metadata)),
+        default=None,
     )
+
+    # TODO: Get rid of the following attributes;
+    # they are properties of COMMAND, not package
 
     #: The source group for this package
     source = attr.ib(
         default=None,
-        validator=optional(instance_of(PackageGroup)),
+        validator=optional(instance_of(Mapping)),
         cmp=False,
     )
     #: The destination group for this package
     destination = attr.ib(
         default=None,
-        validator=optional(instance_of(PackageGroup)),
+        validator=optional(instance_of(Mapping)),
         cmp=False,
     )
 
@@ -114,7 +135,7 @@ class PackageStream:
         structure = defaultdict(lambda: defaultdict(list))
 
         for pkg in sorted(self._container):
-            structure[pkg.el][pkg.collection].append(str(pkg.metadata))
+            structure[pkg.scl.el][pkg.scl.collection].append(str(pkg.metadata))
 
         return yaml.dump(structure, stream, Dumper=YAMLDumper)
 
@@ -140,12 +161,11 @@ class PackageStream:
 
         return cls(
             Package(
-                el=el,
-                collection=scl,
                 metadata=rpm.Metadata.from_nevra(nevra),
+                scl=SCL(collection=collection, el=el),
             )
             for el, collection_map in structure.items()
-            for scl, pkg_list in collection_map.items()
+            for collection, pkg_list in collection_map.items()
             for nevra in pkg_list
         )
 
@@ -161,14 +181,12 @@ def stream_processor(
     as first positional argument.
 
     Keyword arguments:
-        CLI option name to a group kind.
-        Each matching CLI option will be interpreted
-        as a group name or alias
-        and resolved as such for all packages
-        passing through to the wrapped command.
+        source: The kind of source service (repo, build, test).
+        destination: The kind of destination service (repo, build, test).
 
     Returns:
-        The wrapped command.
+        A wrapper around the command.
+        Note that the command is changed to return a prepared action.
     """
 
     if command is None:
@@ -176,45 +194,89 @@ def stream_processor(
 
     @wraps(command)
     @click.pass_context
-    def wrapper(context, *command_args, **command_kwargs):
-        """Construct a closure that adjusts the stream and wraps the command.
+    def wrapper(
+        context,
+        *command_args,
+        **command_kwargs,
+    ):
+        """Command wrapper in charge of service selection.
+
+        The responsibility is twofold:
+        1. Ensure that proper service kind exists and attach it to the package.
+        2. Expand all format strings with information about current SCL.
+
+        Arguments:
+            context: Current context, injected by Click.
+
+        Returns:
+            The command with bound arguments, waiting for the stream to
+            process.
         """
 
-        # Need Parameters for the CLI options and service registry
-        parameters = context.find_object(Parameters)
+        log = LOG.getChild('stream_processor')
 
-        # Prepare the group(s) expansion
-        def expand_groups(package: Package) -> Package:
-            """Expand all specified groups for the passed package."""
+        configuration = context.obj
+        log.debug(
+            '{cmd.__name__} configuration: {conf}'.format(
+                cmd=command,
+                conf=configuration,
+            )
+        )
 
-            group_map = {
-                option: PackageGroup(*parameters.service_registry.resolve(
-                    name_or_alias=parameters.cli_options[option],
-                    kind=kind,
-                    alias_format_map=attr.asdict(package, recurse=False),
-                ))
-                for option, kind in option_kind.items()
+        def locate_service(package: Package) -> Package:
+            """Attach appropriate services to the package."""
+
+            # 'source': configuration['source']['repo']
+            services = {
+                key: configuration[key][kind].copy()
+                for key, kind in option_kind.items()
             }
 
-            return attr.evolve(package, **group_map)
+            return attr.evolve(package, **services)
 
+        def format_labels(package: Package) -> Package:
+            """Process all format strings."""
+
+            for group in filter(None, (package.source, package.destination)):
+                for key in (group.keys() & {'tags', 'targets', 'tests'}):
+                    group[key] = [
+                        l.format_map(attr.asdict(package.scl))
+                        for l in group[key]
+                    ]
+
+            return package
+
+        # This changes
         @wraps(command)
         def processor(stream: Iterator[Package]) -> Iterator[Package]:
-            """Expand the groups and inject the stream to the command."""
+            """The prepared command.
 
-            stream = map(expand_groups, stream)
+            This is a wrapper over the actual command which postpones
+            its execution until the stream of packages is available.
+            For details, see `Click documentation`_
+            and associated `example`_.
+
+            .. _Click documentation: http://click.pocoo.org/6/commands/#multi-command-pipelines  # noqa: E501
+            .. _example: https://github.com/mitsuhiko/click/tree/master/examples/imagepipe  # noqa: E501
+            """
+
+            # Transform the stream using the prepared operations
+            stream = map(locate_service, stream)
+            stream = map(format_labels, stream)
+
             return context.invoke(
                 command, stream, *command_args, **command_kwargs,
             )
-        return processor
-    return wrapper
+
+        return processor  # wrapper returns processor
+    return wrapper  # stream_processor returns wrapper
 
 
 # TODO: POC, re-examine/review again
 def stream_generator(command: Callable = None, **option_kind):
     """Command decorator for generating a package stream.
 
-    Packages in the stream are grouped by (el, collection)
+    Packages in the stream are grouped by scl,
     and the actual metadata are discarded.
     It is assumed that the decorated command will generate
     new metadata for each group.
@@ -237,9 +299,9 @@ def stream_generator(command: Callable = None, **option_kind):
         @wraps(command)
         def generator(stream: Iterator[Package]) -> Iterator[Package]:
             # Group the packages, discard metadata
-            groupings = groupby(stream, attrgetter('el', 'collection'))
+            groupings = groupby(stream, attrgetter('scl'))
             keys = map(itemgetter(0), groupings)
-            placeholders = starmap(Package, keys)
+            placeholders = (Package(scl=scl) for scl in keys)
 
             return processor(placeholders)
         return generator
