@@ -262,7 +262,7 @@ def diff(package_stream, min_days, simple_dist):
     default='.',
     help='Target directory for downloaded packages [default: "."].'
 )
-@stream_processor(source='tag')
+@stream_processor(source='repo')
 def download(package_stream, output_dir):
     """Download packages into specified directory."""
 
@@ -270,7 +270,7 @@ def download(package_stream, output_dir):
     output_dir = Path(output_dir).resolve()
 
     for pkg in package_stream:
-        collection_dir = output_dir / pkg.collection
+        collection_dir = output_dir / pkg.scl.collection
         collection_dir.mkdir(exist_ok=True)
 
         log.info('Fetching {}'.format(pkg.metadata))
@@ -285,29 +285,35 @@ def download(package_stream, output_dir):
     type=click.File(mode='w', encoding='utf-8', lazy=True),
     help='Path to store build failures to [default: stderr].',
 )
-@stream_processor(destination='target')
+@stream_processor(destination='build')
 def build(package_stream, fail_file):
     """Attempt to build packages in target."""
 
-    failed = defaultdict(set)
+    failed = defaultdict(defaultdict(set))
 
     for pkg in package_stream:
-        with pkg.destination.service as builder:
-            try:
-                built = builder.build(pkg.destination.label, pkg.metadata)
-                yield attr.evolve(pkg, metadata=built)
-            except BuildFailure as failure:
-                failed[pkg.collection].add(failure)
+        with pkg.destination['service'] as builder:
+            # TODO potentially duplicates packages (one per target!)
+            for target in pkg.destination['targets']:
+                try:
+                    built = builder.build(target, pkg.metadata)
+                    yield attr.evolve(pkg, metadata=built)
+                except BuildFailure as failure:
+                    failed[pkg.collection][target].add(failure)
 
     if not failed:
         raise StopIteration()
 
     # Convert the stored exceptions to readable representation
     readable_failures = {
-        scl: OrderedDict(
-            (f.package.nevra, f.reason)
-            for f in sorted(fails, key=attrgetter('package'))
-        ) for scl, fails in failed.items()
+        scl: {
+            target: OrderedDict(
+                (f.package.nevra, f.reason)
+                for f in sorted(fails, key=attrgetter('package'))
+            )
+            for target, fails in targets.items()
+        }
+        for scl, targets in failed.items()
     }
 
     if fail_file is None:
@@ -326,11 +332,13 @@ def build(package_stream, fail_file):
     default=None,
     help='Name of the owner for new packages in tag.',
 )
-@stream_processor(destination='tag')
+@stream_processor(destination='repo')
 def tag(package_stream, owner):
     """Tag builds to target."""
 
     for pkg in package_stream:
-        with pkg.destination.service as repo:
-            tagged = repo.tag_build(pkg.destination.label, pkg.metadata)
-            yield attr.evolve(pkg, metadata=tagged)
+        with pkg.destination['service'] as repo:
+            # TODO: Potentialy duplicates packages (one per tag!)
+            for tag in pkg.destination['tags']:
+                tagged = repo.tag_build(tag, pkg.metadata)
+                yield attr.evolve(pkg, metadata=tagged)
