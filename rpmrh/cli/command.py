@@ -177,7 +177,7 @@ def run_chain(
 
 @main.command()
 @click.option(
-    '--min-days', type=click.INT, default=0,
+    '--min-days', type=click.INT, default=None,
     help='Minimum age of the build in destination to qualify for the check.',
 )
 @click.option(
@@ -207,6 +207,10 @@ def diff(package_stream, min_days, simple_dist):
         )
 
     def old_enough(package, source_map):
+        # Skip this check if not explicitly requested
+        if min_days is None:
+            return True
+
         # Attempt to extract tag entry times
         try:
             entry_times = [
