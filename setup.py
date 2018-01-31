@@ -70,6 +70,7 @@ setup(
     package_data={
         'rpmrh': [
             'conf.d/*.service.toml',  # Included service configurations
+            'conf.d/*.phase.toml',  # Included phase configurations
             'conf.d/config.toml',  # Main application configuration
         ],
     },
