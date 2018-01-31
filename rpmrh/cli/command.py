@@ -209,13 +209,13 @@ def diff(package_stream, min_days, simple_dist):
     def old_enough(package, source_map):
         # Attempt to extract tag entry times
         try:
-            entry_times = (
+            entry_times = [
                 source_map['service'].tag_entry_time(
                     tag_name=tag,
                     build=package,
                 )
                 for tag in source_map['tags']
-            )
+            ]
         except NotImplementedError as err:
             message = '[{pkg}] {err!s}, skipping.'.format(
                 pkg=package,
