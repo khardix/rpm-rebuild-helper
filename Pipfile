@@ -16,6 +16,7 @@ cerberus = "*"
 click-log = "*"
 "ruamel.yaml" = "<=0.15"
 toml = "*"
+python-jenkins = "*"
 
 
 [requires]
