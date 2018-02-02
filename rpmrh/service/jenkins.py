@@ -1,6 +1,8 @@
 """Jenkins test runner integration"""
 
 import re
+from itertools import dropwhile
+from typing import Iterator
 
 import attr
 import jenkins
@@ -43,6 +45,31 @@ def _parse_package_line(line: str) -> rpm.Metadata:
         raise ValueError('Unexpected log line: ' + line)
 
     return rpm.Metadata(**match.groupdict())
+
+
+def _extract_installed(lines: Iterator[str]) -> Iterator[rpm.Metadata]:
+    """Extracts installed packages from DNF log.
+
+    This function looks for '*Installed:' header lines inside a log iterator.
+    After a heading, each line up to the first empty one is expected
+    to contain an package description in the format accepted by
+    _parse_package_line().
+
+    All such section are extracted from the log.
+    The packages are reported in the order encountered.
+
+    Keyword arguments:
+        lines: The lines of the log to process.
+
+    Yields:
+        Found packages as rpm.Metadata.
+    """
+
+    while True:
+        lines = dropwhile(lambda line: 'Installed:' not in line, lines)
+        next(lines)  # drop the heading
+        package_lines = iter(lines.__next__, '')
+        yield from map(_parse_package_line, package_lines)
 
 
 @service.register('jenkins')
