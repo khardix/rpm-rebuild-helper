@@ -54,16 +54,22 @@ ALL_BUILDS = SINGLE_SECTION, MULTIPLE_SECTION
 
 
 @pytest.fixture
-def server(mocker):
+def server(mocker, betamax_parametrized_session):
     url = 'https://ci.centos.org/'
     handle = mocker.Mock(spec=jenkins.Jenkins(url))
+    session = betamax_parametrized_session
 
-    handle.get_job_info.side_effect = \
-        lambda name: {j['name']: j for j in ALL_JOBS}[name]
+    def get_job_info(name):
+        try:
+            return {j['name']: j for j in ALL_JOBS}[name]
+        except KeyError as err:
+            raise jenkins.NotFoundException(*err.args) from None
+    handle.get_job_info.side_effect = get_job_info
 
     return service.jenkins.Server(
         url=url,
         handle=handle,
+        session=session,
     )
 
 

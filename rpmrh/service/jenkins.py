@@ -6,9 +6,10 @@ from typing import Iterator
 
 import attr
 import jenkins
+import requests
 from attr.validators import instance_of
 
-from .. import rpm
+from .. import rpm, util
 from ..configuration import service
 
 #: RE of package lines in YUM/DNF logs
@@ -82,6 +83,12 @@ class Server:
 
     #: API handle for low-level calls
     _handle = attr.ib(validator=instance_of(jenkins.Jenkins))
+
+    #: requests.Session for direct HTTP communication
+    _session = attr.ib(
+        default=attr.Factory(util.net.default_requests_session),
+        validator=instance_of(requests.Session),
+    )
 
     @_handle.default
     def default_handle(self):
