@@ -134,3 +134,26 @@ def test_extract_installed_lists_expected_packages(
     extracted = set(service.jenkins._extract_installed(log_lines))
 
     assert build['packages'].issubset(extracted)
+
+
+@pytest.mark.parametrize('job_name', ['job_with_ridiculous_name'])
+def test_tested_packages_report_wrong_job_name(server, job_name):
+    """Wrong job name causes an exception."""
+
+    with pytest.raises(service.jenkins.UnknownJob):
+        server.tested_packages(job_name)
+
+
+@pytest.mark.parametrize('job', [NO_SUCCESS])
+def test_tested_packages_handles_no_successfull_build(server, job):
+    """Job with no successful build is handled gracefully."""
+
+    assert server.tested_packages(job['name']) == frozenset()
+
+
+@pytest.mark.parametrize('job', [ALL_PKGS, INSTALL_ONLY])
+def test_tested_packages_reports_expected_packages(server, job):
+    """Expected packages are extracted from a job."""
+
+    expected = job['lastSuccessfulBuild']['packages']
+    assert server.tested_packages(job['name']).issuperset(expected)

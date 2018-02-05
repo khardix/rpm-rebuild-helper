@@ -2,12 +2,14 @@
 
 import re
 from itertools import dropwhile
-from typing import Iterator
+from typing import Iterator, Set
+from urllib.parse import urljoin
 
 import attr
 import jenkins
 import requests
 from attr.validators import instance_of
+from click import ClickException
 
 from .. import rpm, util
 from ..configuration import service
@@ -73,6 +75,29 @@ def _extract_installed(lines: Iterator[str]) -> Iterator[rpm.Metadata]:
         yield from map(_parse_package_line, package_lines)
 
 
+# TODO Unify exceptions
+class UnknownJob(ClickException):
+    """No job with specified name was found on the server."""
+
+    def __init__(
+        self,
+        server_url: str,
+        job_name: str,
+        *,
+        message_format: str = '[{server_url}]: Job {job_name} not found',
+    ):
+        """Format the error message"""
+
+        super().__init__(message_format.format(
+            server_url=server_url,
+            job_name=job_name,
+        ))
+
+
+class NoInstallLog(RuntimeError):
+    """No install log was found in the build outputs."""
+
+
 @service.register('jenkins')
 @attr.s(slots=True, frozen=True)
 class Server:
@@ -95,3 +120,41 @@ class Server:
         """Construct the handle from URL."""
 
         return jenkins.Jenkins(self.url)
+
+    def tested_packages(self, job_name) -> Set[rpm.Metadata]:
+        """Provide set of packages successfully tested by the specified job.
+
+        Keyword arguments:
+            job_name: The name of the job to query.
+
+        Returns:
+            Set of packages successfully tested by the specified job.
+
+        Raises:
+            UnknownJob: Specified job does not exist.
+            NoInstallLog: Missing installation log, cannot parse the packages.
+        """
+
+        try:
+            build = self._handle.get_job_info(job_name)['lastSuccessfulBuild']
+        except jenkins.NotFoundException as exc:
+            raise UnknownJob(self.url, job_name) from exc
+
+        if build is None:  # No successful build
+            return frozenset()
+
+        log_url = urljoin(build['url'], 'artifact/results/{}/out')
+        install_tests = 'install-all-pkgs', 'install'
+
+        for url in map(log_url.format, install_tests):
+            response = self._session.get(url, stream=True)
+
+            if response.ok:
+                response.encoding = 'utf-8'
+                break
+
+        else:
+            raise NoInstallLog('{}: No install log found'.format(build['url']))
+
+        log_lines = response.iter_lines(decode_unicode=True)
+        return frozenset(_extract_installed(log_lines))
