@@ -1,5 +1,4 @@
 from types import MappingProxyType
-from urllib.parse import urljoin
 
 import jenkins
 import pytest
@@ -11,37 +10,46 @@ ALL_PKGS = MappingProxyType({
     'url': 'https://ci.centos.org/job/SCLo-pkg-rh-java-common-rh-C7-candidate-x86_64/',  # noqa: E501
     'name': 'SCLo-pkg-rh-java-common-rh-C7-candidate-x86_64',
     'format': MappingProxyType({'collection': 'rh-java-common', 'el': 7}),
+    'lastSuccessfulBuild': MappingProxyType({
+        'url': 'https://ci.centos.org/job/SCLo-pkg-rh-java-common-rh-C7-candidate-x86_64/90/',  # noqa: E501
+        'output_url': 'https://ci.centos.org/job/SCLo-pkg-rh-java-common-rh-C7-candidate-x86_64/90/artifact/results/install-all-pkgs/out',  # noqa: E501
+        'packages': frozenset(map(rpm.Metadata.from_nevra, (
+            'rh-java-common-scldevel-1.1-47.el7.x86_64',
+            'maven30-scldevel-1.1-27.el7.x86_64',
+            'rh-java-common-lucene-replicator-4.8.0-6.9.el7.noarch',
+        ))),
+    }),
 })
 #: Job containing only install artifact
 INSTALL_ONLY = MappingProxyType({
     'url': 'https://ci.centos.org/job/SCLo-pkg-devtoolset-7-rh-C7-buildlogs-x86_64/',  # noqa: E501
     'name': 'SCLo-pkg-devtoolset-7-rh-C7-buildlogs-x86_64',
     'format': MappingProxyType({'collection': 'devtoolset-7', 'el': 7}),
+    'lastSuccessfulBuild': MappingProxyType({
+        'url': 'https://ci.centos.org/job/SCLo-pkg-devtoolset-7-rh-C7-buildlogs-x86_64/42/',  # noqa: E501
+        'output_url': 'https://ci.centos.org/job/SCLo-pkg-devtoolset-7-rh-C7-buildlogs-x86_64/42/artifact/results/install/out',  # noqa: E501
+        'packages': frozenset(map(rpm.Metadata.from_nevra, (
+            'centos-release-scl-rh-2-2.el7.centos.noarch',
+            '1:devtoolset-7-make-4.2.1-2.el7.sc1.x86_64',
+            'devtoolset-7-libstdc++-devel-7.2.1-1.el7.sc1.x86_64',
+        ))),
+    }),
+})
+#: Job with no successful builds
+NO_SUCCESS = MappingProxyType({
+    'url': 'https://ci.centos.org/job/SCLo-pkg-rh-eclipse46-rh-C6-testing-x86_64/',  # noqa: E501
+    'name': 'SCLo-pkg-rh-eclipse46-rh-C6-testing-x86_64',
+    'format': MappingProxyType({'collection': 'rh-eclipse46', 'el': 6}),
+    'lastSuccessfulBuild': None,
 })
 
 #: Build with single install section
-SINGLE_SECTION = MappingProxyType(dict(
-    ALL_PKGS,
-    url=urljoin(ALL_PKGS['url'], '90/artifact/results/install-all-pkgs/out'),
-    packages=frozenset(map(rpm.Metadata.from_nevra, (
-        'rh-java-common-scldevel-1.1-47.el7.x86_64',
-        'maven30-scldevel-1.1-27.el7.x86_64',
-        'rh-java-common-lucene-replicator-4.8.0-6.9.el7.noarch',
-    ))),
-))
+SINGLE_SECTION = ALL_PKGS['lastSuccessfulBuild']
 #: Build contains multiple package listings in install artifact
-MULTIPLE_SECTION = MappingProxyType(dict(
-    INSTALL_ONLY,
-    url=urljoin(INSTALL_ONLY['url'], '42/artifact/results/install/out'),
-    packages=frozenset(map(rpm.Metadata.from_nevra, (
-        'centos-release-scl-rh-2-2.el7.centos.noarch',
-        '1:devtoolset-7-make-4.2.1-2.el7.sc1.x86_64',
-        'devtoolset-7-libstdc++-devel-7.2.1-1.el7.sc1.x86_64',
-    ))),
-))
+MULTIPLE_SECTION = INSTALL_ONLY['lastSuccessfulBuild']
 
 # Parametrization sequences
-ALL_JOBS = ALL_PKGS, INSTALL_ONLY
+ALL_JOBS = ALL_PKGS, INSTALL_ONLY, NO_SUCCESS
 ALL_BUILDS = SINGLE_SECTION, MULTIPLE_SECTION
 
 
@@ -112,7 +120,7 @@ def test_extract_installed_lists_expected_packages(
 ):
     """Expected packages are extracted from a log."""
 
-    response = betamax_parametrized_session.get(build['url'])
+    response = betamax_parametrized_session.get(build['output_url'])
     response.raise_for_status()
     response.encoding = 'utf-8'
 
