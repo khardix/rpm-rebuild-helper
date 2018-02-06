@@ -67,7 +67,6 @@ def server(mocker, betamax_parametrized_session):
     handle.get_job_info.side_effect = get_job_info
 
     return service.jenkins.Server(
-        url=url,
         handle=handle,
         session=session,
     )
@@ -77,6 +76,22 @@ def test_server_creation(server):
     """Server instance can be created"""
 
     assert server
+
+
+def test_server_creation_from_configuration(
+    server,
+    betamax_parametrized_session,
+):
+    """Server instance can be created from text configuration"""
+
+    configuration = {
+        'url': 'https://ci.centos.org/',
+        'session': betamax_parametrized_session,
+    }
+
+    configured = service.jenkins.Server.configure(**configuration)
+
+    assert configured._handle.server == configuration['url']
 
 
 @pytest.mark.parametrize('line,expected_metadata', [

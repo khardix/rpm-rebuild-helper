@@ -98,13 +98,10 @@ class NoInstallLog(RuntimeError):
     """No install log was found in the build outputs."""
 
 
-@service.register('jenkins')
+@service.register('jenkins', initializer='configure')
 @attr.s(slots=True, frozen=True)
 class Server:
-    """Remote jenkins server"""
-
-    #: Base URL of the server
-    url = attr.ib(validator=instance_of(str))
+    """Thin wrapper around Jenkins API"""
 
     #: API handle for low-level calls
     _handle = attr.ib(validator=instance_of(jenkins.Jenkins))
@@ -115,11 +112,22 @@ class Server:
         validator=instance_of(requests.Session),
     )
 
-    @_handle.default
-    def default_handle(self):
-        """Construct the handle from URL."""
+    @classmethod
+    def configure(cls, url: str, **attributes):
+        """Create a new server instance from text configuration.
 
-        return jenkins.Jenkins(self.url)
+        Keyword arguments:
+            url: The URL of the Jenkins server.
+            attributes: Other attributes, directly passed to __init__.
+
+        Returns:
+            New instance of Server object.
+        """
+
+        return cls(
+            handle=jenkins.Jenkins(url),
+            **attributes,
+        )
 
     def tested_packages(self, job_name) -> Set[rpm.Metadata]:
         """Provide set of packages successfully tested by the specified job.
@@ -138,7 +146,7 @@ class Server:
         try:
             build = self._handle.get_job_info(job_name)['lastSuccessfulBuild']
         except jenkins.NotFoundException as exc:
-            raise UnknownJob(self.url, job_name) from exc
+            raise UnknownJob(self._handle.server, job_name) from exc
 
         if build is None:  # No successful build
             return frozenset()
