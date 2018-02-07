@@ -1,5 +1,6 @@
 """Jenkins test runner integration"""
 
+import logging
 import re
 from itertools import dropwhile
 from typing import Iterator, Set
@@ -13,6 +14,9 @@ from click import ClickException
 
 from .. import rpm, util
 from ..configuration import service
+
+
+LOG = logging.getLogger(__name__)
 
 #: RE of package lines in YUM/DNF logs
 PKG_LINE_RE = re.compile('''
@@ -149,17 +153,22 @@ class Server:
             raise UnknownJob(self._handle.server, job_name) from exc
 
         if build is None:  # No successful build
+            LOG.debug('No successful build for {} found'.format(job_name))
             return frozenset()
 
         log_url = urljoin(build['url'], 'artifact/results/{}/out')
         install_tests = 'install-all-pkgs', 'install'
 
         for url in map(log_url.format, install_tests):
+            LOG.debug('Trying log URL {}'.format(url))
             response = self._session.get(url, stream=True)
 
-            if response.ok:
-                response.encoding = 'utf-8'
-                break
+            if not response.ok:
+                continue
+
+            response.encoding = 'utf-8'
+            LOG.debug('Checking installed packages in {}'.format(url))
+            break
 
         else:
             raise NoInstallLog('{}: No install log found'.format(build['url']))
