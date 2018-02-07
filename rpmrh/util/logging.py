@@ -1,6 +1,7 @@
 """Utilities for logging"""
 
 import logging
+from contextlib import contextmanager
 
 import click
 from click_log import ColorFormatter
@@ -14,7 +15,7 @@ class ClickErrHandler(logging.Handler):
             click.echo(self.format(record), err=True)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except:
+        except Exception:
             self.handleError(record)
 
 
@@ -62,3 +63,20 @@ def quiet_option(
         )
         return option(f)
     return decorator
+
+
+@contextmanager
+def force_debug_messages(logger: logging.Logger) -> None:
+    """Force emitting debug messages for a code section.
+
+    Keyword arguments:
+        logger: The logger to manipulate.
+    """
+
+    level = logger.getEffectiveLevel()
+    logger.setLevel(logging.DEBUG)
+
+    try:
+        yield
+    finally:
+        logger.setLevel(level)
