@@ -3,7 +3,7 @@
 import logging
 from collections import defaultdict, OrderedDict, ChainMap
 from datetime import timedelta, datetime, timezone
-from functools import reduce
+from functools import reduce, lru_cache
 from itertools import product, chain
 from operator import attrgetter
 from pathlib import Path
@@ -346,3 +346,34 @@ def tag(package_stream, owner):
             for tag in pkg.destination['tags']:
                 tagged = repo.tag_build(tag, pkg.metadata)
                 yield attr.evolve(pkg, metadata=tagged)
+
+
+@main.command()
+@stream_processor(source='check')
+def tested(package_stream):
+    """Filter only packages that has been tested"""
+
+    log = logger.getChild('tested')
+
+    @lru_cache(maxsize=None)
+    def test_set(service, tests):
+        return {
+            pkg.nvr  # FIXME ignoring arch and epoch
+            for job in tests
+            for pkg in service.tested_packages(job)
+        }
+
+    def is_tested(package):
+        result = package.metadata.nvr in test_set(
+            service=package.source['service'],
+            tests=tuple(package.source['tests']),
+        )
+        message = '{metadata}: {status}'.format(
+            metadata=package.metadata,
+            status='tested' if result else 'untested',
+        )
+        log.info(message)
+
+        return result
+
+    return filter(is_tested, package_stream)

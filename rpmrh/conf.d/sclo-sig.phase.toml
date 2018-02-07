@@ -8,6 +8,21 @@ tags = ['sclo{el}-{collection}-rh-candidate']
 service = 'cbs'
 targets = ['sclo{el}-{collection}-rh-el{el}']
 
+[sclo-candidate.check]
+service = 'ci.centos.org'
+tests = ['SCLo-pkg-{collection}-rh-C{el}-candidate-x86_64']
+
 [sclo-testing.repo]
 service = 'cbs'
 tags = ['sclo{el}-{collection}-rh-testing']
+
+[sclo-testing.check]
+service = 'ci.centos.org'
+tests = [
+    'SCLo-pkg-{collection}-rh-C{el}-testing-x86_64',
+    'SCLo-pkg-{collection}-rh-C{el}-buildlogs-x86_64',
+]
+
+[sclo-release.repo]
+service = 'cbs'
+tags = ['sclo{el}-{collection}-rh-release']

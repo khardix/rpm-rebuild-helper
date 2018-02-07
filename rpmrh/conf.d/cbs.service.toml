@@ -3,3 +3,7 @@
 [cbs]
 type = 'koji'
 profile_name = 'cbs'
+
+['ci.centos.org']
+type = 'jenkins'
+url = 'https://ci.centos.org'
