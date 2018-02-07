@@ -1,5 +1,7 @@
 """Test the rpmrh.rpm module."""
 
+from types import MappingProxyType
+
 import sys
 import attr
 import pytest
@@ -9,15 +11,19 @@ from rpmrh import rpm
 
 METADATA_PARAMETERS = [
     # Only required fields
-    {'name': 'rpmrh', 'version': '0.1.0', 'release': '1.fc26'},
+    MappingProxyType({
+        'name': 'rpmrh',
+        'version': '0.1.0',
+        'release': '1.fc26',
+    }),
     # All possible fields
-    {
+    MappingProxyType({
         'name': 'rpmrh',
         'version': '0.1.0',
         'release': '1.fc26',
         'epoch': '1',
         'arch': 'x86_64',
-    },
+    }),
 ]
 
 
@@ -38,7 +44,7 @@ def nevra(request) -> str:
     if isinstance(request.param, str):
         return request.param
 
-    format_map = request.param
+    format_map = request.param.copy()
 
     # Pre-formatting
     if 'epoch' in format_map:
@@ -154,6 +160,14 @@ def test_construction_from_nevra(nevra):
     assert metadata.version == '0.1.0'
     assert metadata.release == '1.fc26'
     assert metadata.arch in {'src', 'x86_64'}
+
+
+def test_construction_from_file_name(nevra):
+    """Metadata can be obtained from base file name."""
+
+    filename = '.'.join((nevra, 'rpm'))
+
+    assert rpm.Metadata.from_nevra(nevra) == rpm.Metadata.from_nevra(filename)
 
 
 @pytest.mark.parametrize('original_nvr,result_nvr', [

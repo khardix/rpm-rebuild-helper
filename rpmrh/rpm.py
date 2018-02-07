@@ -26,6 +26,7 @@ NVRA_re = re.compile(r'''
     (?P<version>[\w.]+)-    # package version
     (?P<release>\w+(?:\.[\w+]+)+?)  # package release, with required dist tag
     (?:\.(?P<arch>\w+))?    # optional package architecture
+    (?:\.rpm)??             # optional rpm extension
     $
 ''', flags=re.VERBOSE)
 # .el7_4 format
