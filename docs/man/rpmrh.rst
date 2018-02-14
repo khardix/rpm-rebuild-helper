@@ -159,3 +159,14 @@ Output
     Use NAME as the owner for new packages in the target tag.
 
 .. todo:: What happens if owner is not specified? Config.
+
+Files
+-----
+
+:file:`$XDG_CONFIG_HOME/rpmrh/config.toml`
+    Main :program:`rpmrh` configuration file.
+    See :manpage:`rpmrh-config(5)` for details.
+
+:file:`$XDG_CONFIG_HOME/rpmrh/{name}.service.toml`, :file:`$XDG_CONFIG_HOME/rpmrh/{name}.phase.toml`
+    Configuration files with :term:`service`\ s or :term:`phase`\ s definitions, respectively.
+    See :manpage:`rpmrh-config(5)` for details.
