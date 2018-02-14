@@ -141,10 +141,13 @@ latex_documents = [
 
 # -- Options for manual page output ------------------------------------------
 
+# Show URLs in generated output
+man_show_urls = True
+
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('cli', 'rpmrh', 'RPM Rebuild Helper Documentation', [author], 1)
+    ('man/rpmrh', 'rpmrh', 'RPM Rebuild Helper', [author], 1),
 ]
 
 
