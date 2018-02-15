@@ -13,6 +13,13 @@ It focuses primarily on `Software Collections`_ packages in order to make lives 
 
     man/index
 
+.. toctree::
+    :maxdepth: 1
+    :caption: API documentation
+    :glob:
+
+    api/*
+
 
 Indices and tables
 ==================
