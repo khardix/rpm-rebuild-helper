@@ -1,15 +1,17 @@
-.. RPM Rebuild Helper documentation master file, created by
-   sphinx-quickstart on Tue Feb 13 13:15:31 2018.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+RPM Rebuild Helper
+==================
 
-Welcome to RPM Rebuild Helper's documentation!
-==============================================
+The RPM Rebuild Helper is a command line tool designed to automate the tasks associated with re-building the same SRPMs in different places.
+It focuses primarily on `Software Collections`_ packages in order to make lives easier for `CentOS SCLo SIG`_.
+
+.. _Software Collections: https://www.softwarecollections.org
+.. _CentOS SCLo SIG: https://wiki.centos.org/SpecialInterestGroup/SCLo
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+    :maxdepth: 2
+    :caption: User Guide:
 
+    man/index
 
 
 Indices and tables
