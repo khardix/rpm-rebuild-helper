@@ -5,18 +5,20 @@ import pytest
 
 from rpmrh import service, rpm
 
+# FIXME Separation to ALL_PKGS and INSTALL_ONLY no longer makes sense
+
 #: Job containing install-all-pkgs artifact
 ALL_PKGS = MappingProxyType({
     'url': 'https://ci.centos.org/job/SCLo-pkg-rh-java-common-rh-C7-candidate-x86_64/',  # noqa: E501
     'name': 'SCLo-pkg-rh-java-common-rh-C7-candidate-x86_64',
     'format': MappingProxyType({'collection': 'rh-java-common', 'el': 7}),
     'lastSuccessfulBuild': MappingProxyType({
-        'url': 'https://ci.centos.org/job/SCLo-pkg-rh-java-common-rh-C7-candidate-x86_64/90/',  # noqa: E501
-        'output_url': 'https://ci.centos.org/job/SCLo-pkg-rh-java-common-rh-C7-candidate-x86_64/90/artifact/results/install-all-pkgs/out',  # noqa: E501
+        'number': 94,
+        'url': 'https://ci.centos.org/job/SCLo-pkg-rh-java-common-rh-C7-candidate-x86_64/94/',  # noqa: E501
         'packages': frozenset(map(rpm.Metadata.from_nevra, (
-            'rh-java-common-scldevel-1.1-47.el7.x86_64',
-            'maven30-scldevel-1.1-27.el7.x86_64',
-            'rh-java-common-lucene-replicator-4.8.0-6.9.el7.noarch',
+            'rh-java-common-1.1-47.el7.src.rpm',
+            'rh-java-common-easymock3-3.3-1.5.el7.src.rpm',
+            'rh-java-common-lucene5-5.4.1-2.4.el7.src.rpm',
         ))),
     }),
 })
@@ -26,12 +28,12 @@ INSTALL_ONLY = MappingProxyType({
     'name': 'SCLo-pkg-devtoolset-7-rh-C7-buildlogs-x86_64',
     'format': MappingProxyType({'collection': 'devtoolset-7', 'el': 7}),
     'lastSuccessfulBuild': MappingProxyType({
-        'url': 'https://ci.centos.org/job/SCLo-pkg-devtoolset-7-rh-C7-buildlogs-x86_64/42/',  # noqa: E501
-        'output_url': 'https://ci.centos.org/job/SCLo-pkg-devtoolset-7-rh-C7-buildlogs-x86_64/42/artifact/results/install/out',  # noqa: E501
+        'number': 46,
+        'url': 'https://ci.centos.org/job/SCLo-pkg-devtoolset-7-rh-C7-buildlogs-x86_64/46/',  # noqa: E501
         'packages': frozenset(map(rpm.Metadata.from_nevra, (
-            'centos-release-scl-rh-2-2.el7.centos.noarch',
-            '1:devtoolset-7-make-4.2.1-2.el7.sc1.x86_64',
-            'devtoolset-7-libstdc++-devel-7.2.1-1.el7.sc1.x86_64',
+            'CUnit-2.1.3-13.el7.src.rpm',
+            'devtoolset-7-gcc-7.2.1-1.el7.sc1.src.rpm',
+            'maven30-icc-profiles-openicc-1.3.1-5.8.el7.src.rpm',
         ))),
     }),
 })
@@ -94,63 +96,6 @@ def test_server_creation_from_configuration(
     assert configured._handle.server == configuration['url']
 
 
-@pytest.mark.parametrize('line,expected_metadata', [
-    (
-        'java-1.7.0-openjdk.x86_64 1:1.7.0.161-2.6.12.0.el7_4',
-        rpm.Metadata(
-            name='java-1.7.0-openjdk',
-            epoch=1,
-            version='1.7.0.161',
-            release='2.6.12.0.el7_4',
-            arch='x86_64',
-        ),
-    ),
-    (
-        'maven30-maven-artifact.noarch 0:2.2.1-47.11.el7',
-        rpm.Metadata(
-            name='maven30-maven-artifact',
-            epoch=0,
-            version='2.2.1',
-            release='47.11.el7',
-            arch='noarch',
-        ),
-    ),
-])
-def test_parse_package_line_accepts_correct_line(line, expected_metadata):
-    """YUM/DNF package line parsing accepts correct lines"""
-
-    assert service.jenkins._parse_package_line(line) == expected_metadata
-
-
-@pytest.mark.parametrize('line', [
-    '',
-    'Dependency Installed:',
-    'Installing : 1:perl-parent-0.225-244.el7.noarch        1/595',
-])
-def test_parse_package_line_reports_unexpected_line(line):
-    """YUM/DNF package line parsing raises on unexpected line"""
-
-    with pytest.raises(ValueError):
-        service.jenkins._parse_package_line(line)
-
-
-@pytest.mark.parametrize('build', ALL_BUILDS)
-def test_extract_installed_lists_expected_packages(
-    betamax_parametrized_session,
-    build,
-):
-    """Expected packages are extracted from a log."""
-
-    response = betamax_parametrized_session.get(build['output_url'])
-    response.raise_for_status()
-    response.encoding = 'utf-8'
-
-    log_lines = response.iter_lines(decode_unicode=True)
-    extracted = set(service.jenkins._extract_installed(log_lines))
-
-    assert build['packages'].issubset(extracted)
-
-
 @pytest.mark.parametrize('job_name', ['job_with_ridiculous_name'])
 def test_tested_packages_report_wrong_job_name(server, job_name):
     """Wrong job name causes an exception."""
@@ -171,4 +116,5 @@ def test_tested_packages_reports_expected_packages(server, job):
     """Expected packages are extracted from a job."""
 
     expected = job['lastSuccessfulBuild']['packages']
-    assert server.tested_packages(job['name']).issuperset(expected)
+    actual = server.tested_packages(job['name'])
+    assert actual >= expected, 'Missing packages: {}'.format(expected - actual)

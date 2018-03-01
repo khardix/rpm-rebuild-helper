@@ -1,9 +1,7 @@
 """Jenkins test runner integration"""
 
 import logging
-import re
-from itertools import dropwhile
-from typing import Iterator, Set
+from typing import Set
 from urllib.parse import urljoin
 
 import attr
@@ -17,66 +15,6 @@ from ..configuration import service
 
 
 LOG = logging.getLogger(__name__)
-
-#: RE of package lines in YUM/DNF logs
-PKG_LINE_RE = re.compile('''
-    (?P<name>\S+)            # package name
-    (?:\.(?P<arch>\w+))     # package architecture
-    \s+                     # white-space separator
-    (?P<epoch>\d+):         # required package epoch
-    (?P<version>[\w.]+)-    # package version
-    (?P<release>\w+(?:\.[\w+]+)+)  # package release, with required dist tag
-''', flags=re.VERBOSE)
-
-
-def _parse_package_line(line: str) -> rpm.Metadata:
-    """Parse a DNF log line with package information.
-
-    The expected format of the line is::
-
-        {name}.{arch} {epoch}:{version}-{release}
-
-    Keyword arguments:
-        line: The line to parse.
-
-    Returns:
-        The parsed metadata.
-
-    Raises:
-        ValueError: The line is not in the expected format.
-    """
-
-    match = PKG_LINE_RE.search(line)
-
-    if not match:
-        raise ValueError('Unexpected log line: ' + line)
-
-    return rpm.Metadata(**match.groupdict())
-
-
-def _extract_installed(lines: Iterator[str]) -> Iterator[rpm.Metadata]:
-    """Extracts installed packages from DNF log.
-
-    This function looks for '*Installed:' header lines inside a log iterator.
-    After a heading, each line up to the first empty one is expected
-    to contain an package description in the format accepted by
-    _parse_package_line().
-
-    All such section are extracted from the log.
-    The packages are reported in the order encountered.
-
-    Keyword arguments:
-        lines: The lines of the log to process.
-
-    Yields:
-        Found packages as rpm.Metadata.
-    """
-
-    while True:
-        lines = dropwhile(lambda line: 'Installed:' not in line, lines)
-        next(lines)  # drop the heading
-        package_lines = iter(lines.__next__, '')
-        yield from map(_parse_package_line, package_lines)
 
 
 # TODO Unify exceptions
@@ -98,8 +36,8 @@ class UnknownJob(ClickException):
         ))
 
 
-class NoInstallLog(RuntimeError):
-    """No install log was found in the build outputs."""
+class NoSourcePackages(RuntimeError):
+    """No source package listing was found in the build outputs."""
 
 
 @service.register('jenkins', initializer='configure')
@@ -144,7 +82,8 @@ class Server:
 
         Raises:
             UnknownJob: Specified job does not exist.
-            NoInstallLog: Missing installation log, cannot parse the packages.
+            NoSourcePackages: No source package listing in build output,
+                nothing to parse.
         """
 
         try:
@@ -156,22 +95,20 @@ class Server:
             LOG.debug('No successful build for {} found'.format(job_name))
             return frozenset()
 
-        log_url = urljoin(build['url'], 'artifact/results/{}/out')
-        install_tests = 'install-all-pkgs', 'install'
+        log_url = urljoin(build['url'], 'artifact/results/source-packages.txt')
 
-        for url in map(log_url.format, install_tests):
-            LOG.debug('Trying log URL {}'.format(url))
-            response = self._session.get(url, stream=True)
+        try:
+            response = self._session.get(log_url, stream=True)
+            response.raise_for_status()
+        except requests.HTTPError as error:
+            message = '{job}#{number}: Cannot open source packages: {reason}'
+            raise NoSourcePackages(message.format(
+                job=job_name,
+                number=build['number'],
+                reason=error.response.reason,
+            )) from error
 
-            if not response.ok:
-                continue
-
-            response.encoding = 'utf-8'
-            LOG.debug('Checking installed packages in {}'.format(url))
-            break
-
-        else:
-            raise NoInstallLog('{}: No install log found'.format(build['url']))
-
-        log_lines = response.iter_lines(decode_unicode=True)
-        return frozenset(_extract_installed(log_lines))
+        return frozenset(
+            rpm.Metadata.from_nevra(line)
+            for line in response.iter_lines(decode_unicode=True)
+        )
