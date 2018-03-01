@@ -344,7 +344,7 @@ def tag(package_stream, owner):
         with pkg.destination['service'] as repo:
             # TODO: Potentialy duplicates packages (one per tag!)
             for tag in pkg.destination['tags']:
-                tagged = repo.tag_build(tag, pkg.metadata)
+                tagged = repo.tag_build(tag, pkg.metadata, owner=owner)
                 yield attr.evolve(pkg, metadata=tagged)
 
 
