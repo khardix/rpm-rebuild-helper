@@ -39,6 +39,7 @@ DEPENDENCIES = [
     'cerberus',
     'click',
     'click-log',
+    'python-jenkins',
     'pyxdg',
     'requests',
     'requests-file',
