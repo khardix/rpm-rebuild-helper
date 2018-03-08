@@ -24,7 +24,7 @@ copyright = '2018, Jan Staněk'
 author = 'Jan Staněk'
 
 # The short X.Y version
-version = ''
+version = 'unknown dev'
 # The full version, including alpha/beta/rc tags
 release = ''
 
@@ -86,8 +86,15 @@ html_theme = 'alabaster'
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-#
-# html_theme_options = {}
+html_theme_options = {
+    'description': 'Automatic RPM & SCL rebuilding',
+    'github_user': 'khardix',
+    'github_repo': 'rpm-rebuild-helper',
+    'travis_button': True,
+    'sidebar_collapse': True,
+    'sidebar_width': '250px',
+    'fixed_sidebar': True,
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -101,8 +108,15 @@ html_static_path = ['_static']
 # defined by theme itself.  Builtin themes are using these templates by
 # default: ``['localtoc.html', 'relations.html', 'sourcelink.html',
 # 'searchbox.html']``.
-#
-# html_sidebars = {}
+html_sidebars = {
+    '**': [
+        'about.html',
+        'navigation.html',
+        'relations.html',
+        'searchbox.html',
+        'sourcelink.html',
+    ],
+}
 
 
 # -- Options for HTMLHelp output ---------------------------------------------
