@@ -87,6 +87,8 @@ html_theme = 'alabaster'
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
+    'logo': 'logo-box.png',
+    'logo_name': True,
     'description': 'Automatic RPM & SCL rebuilding',
     'github_user': 'khardix',
     'github_repo': 'rpm-rebuild-helper',
