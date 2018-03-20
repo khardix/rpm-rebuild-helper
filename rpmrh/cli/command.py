@@ -27,6 +27,7 @@ util.logging.basic_config(logger)
 # Commands
 @click.group(chain=True, invoke_without_command=True)
 @util.logging.quiet_option(logger)
+@click.version_option()
 @click.option(
     '--input', '-i', 'input_file', type=click.File(),
     help='YAML file with input data (or - for standard input).'
