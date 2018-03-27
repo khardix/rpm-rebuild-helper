@@ -17,6 +17,7 @@ from .tooling import SCL, Package, PackageStream
 from .tooling import load_configuration, stream_processor, stream_generator
 from .. import RESOURCE_ID, util, rpm, configuration
 from ..service.abc import BuildFailure
+from ..service.jenkins import UnknownJob
 
 
 # Logging setup
@@ -358,11 +359,15 @@ def tested(package_stream):
 
     @lru_cache(maxsize=None)
     def test_set(service, tests):
-        return {
-            pkg.nvr  # FIXME ignoring arch and epoch
-            for job in tests
-            for pkg in service.tested_packages(job)
-        }
+        try:
+            return {
+                pkg.nvr  # FIXME ignoring arch and epoch
+                for job in tests
+                for pkg in service.tested_packages(job)
+            }
+        except UnknownJob as no_tests:
+            log.warning(no_tests)
+            return frozenset()
 
     def is_tested(package):
         result = package.metadata.nvr in test_set(
