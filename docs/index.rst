@@ -8,6 +8,7 @@ Version: |version|
 .. image:: https://img.shields.io/pypi/l/rpmrh.svg
 .. image:: https://img.shields.io/pypi/pyversions/rpmrh.svg
 .. image:: https://img.shields.io/pypi/status/rpmrh.svg
+.. image:: https://img.shields.io/readthedocs/rpm-rebuild-helper.svg
 
 .. |rpmrh| replace:: ``rpmrh``
 
