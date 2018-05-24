@@ -1,31 +1,14 @@
 [[source]]
-
 url = "https://pypi.python.org/simple"
 verify_ssl = true
 
-
 [packages]
-
-click = "*"
-attrs = ">=17"
-pytrie = "*"
-requests = "*"
-requests-file = "*"
-pyxdg = "*"
-cerberus = "*"
-click-log = "*"
-"ruamel.yaml" = "<=0.15"
-toml = "*"
-python-jenkins = "*"
-
+"e1839a8" = {path = ".", editable = true}
 
 [requires]
-
 python_version = "3.6"
 
-
 [dev-packages]
-
 pytest = "*"
 pyfakefs = "*"
 betamax = "*"
