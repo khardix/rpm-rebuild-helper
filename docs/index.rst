@@ -112,9 +112,18 @@ Each sub-section than should be configured with appropriate package group select
 The group selection can optionally contain ``{collection}`` and/or ``{el}`` placeholders.
 These are dynamically replaced for each processed package by the appropriate SCL name and major EPEL version, respectivelly.
 
+Manual Pages
+------------
+
+.. toctree::
+   :maxdepth: 2
+
+   man/rpmrh
+
 API Documentation
 -----------------
 
 .. toctree::
+   :maxdepth: 3
 
-   api/*
+   api/rpm

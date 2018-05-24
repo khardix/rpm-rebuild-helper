@@ -203,3 +203,11 @@ todo_include_todos = True
 
 # Use admonition instead of rubric for following sections.
 napoleon_use_admonition_for_examples = True
+
+# -- Options for autodoc extension ------------------------------------------
+
+# Mock following module imports
+autodoc_mock_imports = ["rpm", "koji", "dnf"]
+
+# Sort automatic members by in-source order
+autodoc_member_order = "bysource"

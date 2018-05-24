@@ -1,5 +1,5 @@
-``rpm`` -- RPM Metadata Utilities
-=================================
+RPM Toolkit
+===========
 
 .. automodule:: rpmrh.rpm
     :members:
