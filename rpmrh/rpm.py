@@ -59,10 +59,14 @@ class Metadata:
     providing common comparison and other "dunder" methods.
     """
 
+    #: RPM name
     name = attr.ib(validator=instance_of(str))
+    #: RPM version
     version = attr.ib(validator=instance_of(str))
+    #: RPM release
     release = attr.ib(validator=instance_of(str))
 
+    #: Optional RPM epoch
     epoch = attr.ib(
         validator=optional(instance_of(int)),
         default=0,
@@ -70,6 +74,7 @@ class Metadata:
         convert=lambda val: 0 if val is None else int(val),
     )
 
+    #: RPM architecture
     arch = attr.ib(
         validator=optional(instance_of(str)),
         default="src",
@@ -148,13 +153,13 @@ class Metadata:
 
     @property
     def nvr(self) -> str:
-        """Name-Version-Release string of the RPM object"""
+        """:samp:`{name}-{version}-{release}` string of the RPM object"""
 
         return "{s.name}-{s.version}-{s.release}".format(s=self)
 
     @property
     def nevra(self) -> str:
-        """Name-Epoch:Version-Release.Architecture string of the RPM object"""
+        """:samp:`{name}-{epoch}:{version}-{release}.{arch}` string of the RPM object"""
 
         return "{s.name}-{s.epoch}:{s.version}-{s.release}.{s.arch}".format(s=self)
 
@@ -225,7 +230,7 @@ class LocalPackage(Metadata):
         return Path.cwd() / self.canonical_file_name
 
     @path.validator
-    def existing_file_path(self, _attribute, path):
+    def _existing_file_path(self, _attribute, path):
         """The path must point to an existing file"""
 
         if not path.is_file():
@@ -233,7 +238,7 @@ class LocalPackage(Metadata):
 
     # Alternative constructors
     @classmethod
-    def from_path(cls, path: Path) -> "Metadata":
+    def from_path(cls, path: Path) -> "LocalPackage":
         """Read metadata for specified RPM file path.
 
         Keyword arguments:
@@ -262,9 +267,9 @@ def shorten_dist_tag(metadata: Metadata) -> Metadata:
     """Shorten release string by removing extra parts of dist tag.
 
     Examples:
-        abcde-1.0-1.el7_4 → abcde-1.0-1.el7
-        binutils-3.6-4.el8+4 → binutils-3.6-4.el8
-        abcde-1.0-1.fc27 → abcde-1.0-1.fc27
+        - abcde-1.0-1.el7_4 → abcde-1.0-1.el7
+        - binutils-3.6-4.el8+4 → binutils-3.6-4.el8
+        - abcde-1.0-1.fc27 → abcde-1.0-1.fc27
 
     Keyword arguments:
         metadata: The metadata to shorten.
