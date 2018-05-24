@@ -127,3 +127,4 @@ API Documentation
    :maxdepth: 3
 
    api/rpm
+   api/service
