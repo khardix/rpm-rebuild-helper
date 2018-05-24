@@ -11,16 +11,17 @@ from attr.validators import instance_of, optional
 
 from .util import system_import
 
-_rpm = system_import('rpm')
+_rpm = system_import("rpm")
 
 # type aliases for comparison functions
-CompareOperator = Callable[[TypeVar('T'), TypeVar('T')], bool]
+CompareOperator = Callable[[TypeVar("T"), TypeVar("T")], bool]
 CompareResult = Union[bool, type(NotImplemented)]
 
 
 # NEVRA-related regular expressions
-EPOCH_RE = re.compile(r'(\d+):')
-NVRA_re = re.compile(r'''
+EPOCH_RE = re.compile(r"(\d+):")
+NVRA_re = re.compile(
+    r"""
     ^
     (?P<name>\S+)-          # package name
     (?P<version>[\w.]+)-    # package version
@@ -28,14 +29,19 @@ NVRA_re = re.compile(r'''
     (?:\.(?P<arch>\w+))?    # optional package architecture
     (?:\.rpm)??             # optional rpm extension
     $
-''', flags=re.VERBOSE)
+""",
+    flags=re.VERBOSE,
+)
 # .el7_4 format
-LONG_DIST_RE = re.compile(r'''
+LONG_DIST_RE = re.compile(
+    r"""
     (\.         # short dist tag starts with a dot…
     [^\W\d_]+   # … followed by at least one letter…
     \d+)        # … and ended by at least one digit
     [^.]*  # any other characters up to the next dot
-''', flags=re.VERBOSE)
+""",
+    flags=re.VERBOSE,
+)
 
 
 # Helper for ensuring resolved paths
@@ -66,14 +72,14 @@ class Metadata:
 
     arch = attr.ib(
         validator=optional(instance_of(str)),
-        default='src',
-        convert=lambda val: 'src' if val is None else str(val),
+        default="src",
+        convert=lambda val: "src" if val is None else str(val),
     )
 
     # Alternative constructors
 
     @classmethod
-    def from_file(cls, file: BinaryIO) -> 'Metadata':
+    def from_file(cls, file: BinaryIO) -> "Metadata":
         """Read metadata from an RPM file.
 
         Keyword arguments:
@@ -93,23 +99,23 @@ class Metadata:
 
         # Decode the attributes
         attributes = {
-            'name': header[_rpm.RPMTAG_NAME].decode('utf-8'),
-            'version': header[_rpm.RPMTAG_VERSION].decode('utf-8'),
-            'release': header[_rpm.RPMTAG_RELEASE].decode('utf-8'),
-            'epoch': header[_rpm.RPMTAG_EPOCHNUM],
+            "name": header[_rpm.RPMTAG_NAME].decode("utf-8"),
+            "version": header[_rpm.RPMTAG_VERSION].decode("utf-8"),
+            "release": header[_rpm.RPMTAG_RELEASE].decode("utf-8"),
+            "epoch": header[_rpm.RPMTAG_EPOCHNUM],
         }
 
         # For source RPMs the architecture reported is a binary one
         # for some reason
         if header[_rpm.RPMTAG_SOURCEPACKAGE]:
-            attributes['arch'] = 'src'
+            attributes["arch"] = "src"
         else:
-            attributes['arch'] = header[_rpm.RPMTAG_ARCH].decode('utf-8')
+            attributes["arch"] = header[_rpm.RPMTAG_ARCH].decode("utf-8")
 
         return cls(**attributes)
 
     @classmethod
-    def from_nevra(cls, nevra: str) -> 'Metadata':
+    def from_nevra(cls, nevra: str) -> "Metadata":
         """Parse a string NEVRA and converts it to respective fields.
 
         Keyword arguments:
@@ -123,14 +129,15 @@ class Metadata:
 
         # Extract the epoch, if present
         def replace_epoch(match):
-            arguments['epoch'] = match.group(1)
-            return ''
+            arguments["epoch"] = match.group(1)
+            return ""
+
         nvra = EPOCH_RE.sub(replace_epoch, nevra, count=1)
 
         # Parse the rest of the string
         match = NVRA_re.match(nvra)
         if not match:
-            message = 'Invalid NEVRA string: {}'.format(nevra)
+            message = "Invalid NEVRA string: {}".format(nevra)
             raise ValueError(message)
 
         arguments.update(match.groupdict())
@@ -143,15 +150,13 @@ class Metadata:
     def nvr(self) -> str:
         """Name-Version-Release string of the RPM object"""
 
-        return '{s.name}-{s.version}-{s.release}'.format(s=self)
+        return "{s.name}-{s.version}-{s.release}".format(s=self)
 
     @property
     def nevra(self) -> str:
         """Name-Epoch:Version-Release.Architecture string of the RPM object"""
 
-        return '{s.name}-{s.epoch}:{s.version}-{s.release}.{s.arch}'.format(
-            s=self
-        )
+        return "{s.name}-{s.epoch}:{s.version}-{s.release}.{s.arch}".format(s=self)
 
     @property
     def label(self) -> Tuple[int, str, str]:
@@ -164,14 +169,16 @@ class Metadata:
         """Canonical base file name of a package with this metadata."""
 
         if self.epoch:
-            format = '{s.name}-{s.epoch}:{s.version}-{s.release}.{s.arch}.rpm'
+            format = "{s.name}-{s.epoch}:{s.version}-{s.release}.{s.arch}.rpm"
         else:
-            format = '{s.name}-{s.version}-{s.release}.{s.arch}.rpm'
+            format = "{s.name}-{s.version}-{s.release}.{s.arch}.rpm"
 
         return format.format(s=self)
 
     # Comparison methods
-    def _compare(self, other: 'Metadata', oper: CompareOperator) -> CompareResult:  # noqa: E501
+    def _compare(
+        self, other: "Metadata", oper: CompareOperator
+    ) -> CompareResult:  # noqa: E501
         """Generic comparison of two RPM-like objects.
 
         Keyword arguments:
@@ -226,7 +233,7 @@ class LocalPackage(Metadata):
 
     # Alternative constructors
     @classmethod
-    def from_path(cls, path: Path) -> 'Metadata':
+    def from_path(cls, path: Path) -> "Metadata":
         """Read metadata for specified RPM file path.
 
         Keyword arguments:
@@ -236,7 +243,7 @@ class LocalPackage(Metadata):
             New instance of LocalPackage.
         """
 
-        with path.open(mode='rb') as file:
+        with path.open(mode="rb") as file:
             metadata = attr.asdict(Metadata.from_file(file))
 
         return cls(**metadata, path=path)
@@ -266,7 +273,4 @@ def shorten_dist_tag(metadata: Metadata) -> Metadata:
         Potentially modified metadata.
     """
 
-    return attr.evolve(
-        metadata,
-        release=LONG_DIST_RE.sub(r'\1', metadata.release),
-    )
+    return attr.evolve(metadata, release=LONG_DIST_RE.sub(r"\1", metadata.release))

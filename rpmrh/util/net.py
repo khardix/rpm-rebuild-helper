@@ -28,7 +28,7 @@ def default_requests_session(session: Optional[requests.Session] = None):
     session = requests.Session()
 
     # Add local file adapter
-    session.mount('file://', FileAdapter())
+    session.mount("file://", FileAdapter())
 
     return session
 

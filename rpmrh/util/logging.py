@@ -35,15 +35,16 @@ def quiet_option(
     *names,
     level_quiet: int = logging.ERROR,
     level_verbose: int = logging.INFO,
-    help: str = 'Silence informative output.',
+    help: str = "Silence informative output.",
     **kwargs
 ):
     """Click option for silencing the logging output."""
 
     if not names:
-        names = '--quiet', '-q'
+        names = "--quiet", "-q"
 
     def decorator(f):
+
         def set_level(_ctx, _param, quiet):
             """Set logger output level."""
 
@@ -62,6 +63,7 @@ def quiet_option(
             **kwargs
         )
         return option(f)
+
     return decorator
 
 

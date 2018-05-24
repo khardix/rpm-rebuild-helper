@@ -11,10 +11,7 @@ class InvalidConfiguration(click.ClickException):
 
 
 def validate(
-    configuration_map: Mapping,
-    *,
-    schema: Mapping,
-    top_level: Optional[str] = None,
+    configuration_map: Mapping, *, schema: Mapping, top_level: Optional[str] = None
 ) -> dict:
     """Ensure that the configuration mapping conforms to a schema.
 

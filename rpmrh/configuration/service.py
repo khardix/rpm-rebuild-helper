@@ -8,13 +8,17 @@ from ._validation import validate, InvalidConfiguration  # noqa: F401
 
 
 #: Description of generic service configuration
-SCHEMA = {'service': {  # dummy key to allow for top-level structure validation
-    'type': 'dict',
-    'keyschema': {'type': 'string', 'coerce': str},
-    'valueschema': {'type': 'dict', 'allow_unknown': True, 'schema': {
-        'type': {'type': 'string', 'required': True},
-    }},
-}}
+SCHEMA = {
+    "service": {  # dummy key to allow for top-level structure validation
+        "type": "dict",
+        "keyschema": {"type": "string", "coerce": str},
+        "valueschema": {
+            "type": "dict",
+            "allow_unknown": True,
+            "schema": {"type": {"type": "string", "required": True}},
+        },
+    }
+}
 
 #: Registered service types
 KNOWN_TYPES = {}
@@ -25,6 +29,7 @@ class DuplicateError(KeyError):
 
 
 # Dynamic configuration type registration
+
 
 def register(
     name: str,
@@ -59,13 +64,12 @@ def register(
             registry[name] = cls
 
         return cls
+
     return decorator
 
 
 def make_instance(
-    configuration_map: MutableMapping,
-    *,
-    registry: MutableMapping = KNOWN_TYPES,
+    configuration_map: MutableMapping, *, registry: MutableMapping = KNOWN_TYPES
 ):
     """Turn configuration into proper instance.
 
@@ -81,9 +85,9 @@ def make_instance(
         KeyError: Requested type is missing from registry.
     """
 
-    type_name = configuration_map.pop('type')
+    type_name = configuration_map.pop("type")
     return registry[type_name](**configuration_map)
 
 
 # Configuration file processing
-validate = partial(validate, schema=SCHEMA, top_level='service')
+validate = partial(validate, schema=SCHEMA, top_level="service")

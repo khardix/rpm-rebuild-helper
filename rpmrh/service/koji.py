@@ -19,7 +19,7 @@ from .. import rpm
 from ..configuration import service
 from ..util import system_import
 
-koji = system_import('koji')
+koji = system_import("koji")
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class BuiltPackage(rpm.Metadata):
     id = attr.ib(validator=instance_of(int), convert=int, default=None)
 
     @classmethod
-    def from_mapping(cls, raw_data: Mapping) -> 'BuiltPackage':
+    def from_mapping(cls, raw_data: Mapping) -> "BuiltPackage":
         """Explicitly create BuiltPackage from mapping that contain extra keys.
 
         This constructor accepts any existing mapping and cherry-picks
@@ -52,19 +52,15 @@ class BuiltPackage(rpm.Metadata):
 
         valid_keys = {attribute.name for attribute in attr.fields(cls)}
         known_data = {
-            key: value
-            for key, value in raw_data.items()
-            if key in valid_keys
+            key: value for key, value in raw_data.items() if key in valid_keys
         }
 
         return cls(**known_data)
 
     @classmethod
     def from_metadata(
-        cls,
-        service: 'Service',
-        original: rpm.Metadata
-    ) -> 'BuiltPackage':
+        cls, service: "Service", original: rpm.Metadata
+    ) -> "BuiltPackage":
         """'Downcast' a Metadata instance by downloading missing data.
 
         Keyword arguments:
@@ -83,7 +79,7 @@ class BuiltPackage(rpm.Metadata):
         return cls.from_mapping(raw_data)
 
 
-@service.register('koji', initializer='from_config_profile')
+@service.register("koji", initializer="from_config_profile")
 @attr.s(slots=True, frozen=True)
 class Service(abc.Repository, abc.Builder):
     """Interaction session with a Koji build service."""
@@ -99,59 +95,49 @@ class Service(abc.Repository, abc.Builder):
 
     #: Tag prefixes associated with this Koji instance
     tag_prefixes = attr.ib(
-        validator=instance_of(Set),
-        convert=set,
-        default=attr.Factory(set),
+        validator=instance_of(Set), convert=set, default=attr.Factory(set)
     )
 
     #: Target prefixes associated with this koji instance
     target_prefixes = attr.ib(
-        validator=instance_of(Set),
-        convert=set,
-        default=attr.Factory(set),
+        validator=instance_of(Set), convert=set, default=attr.Factory(set)
     )
 
     #: Owner to use when adding packages to tag
-    default_owner = attr.ib(
-        validator=optional(instance_of(str)),
-        default=None,
-    )
+    default_owner = attr.ib(validator=optional(instance_of(str)), default=None)
 
     # Dynamic defaults
 
     @session.default
     def configured_session(self):
         """ClientSession from configuration values."""
-        return koji.ClientSession(self.configuration['server'])
+        return koji.ClientSession(self.configuration["server"])
 
     @path_info.default
     def configured_path_info(self):
         """PathInfo from configuration values."""
-        return koji.PathInfo(self.configuration['topurl'])
+        return koji.PathInfo(self.configuration["topurl"])
 
     # Alternate constructors
 
     @classmethod
-    def from_config_profile(cls, profile_name: str, **kwargs) -> 'Service':
+    def from_config_profile(cls, profile_name: str, **kwargs) -> "Service":
         """Constructs new instance from local configuration profile.
 
         Keyword arguments:
             profile_name: Name of the profile to use.
         """
 
-        return cls(
-            configuration=koji.read_config(profile_name),
-            **kwargs,
-        )
+        return cls(configuration=koji.read_config(profile_name), **kwargs)
 
     # Session authentication
 
-    def __enter__(self) -> 'Service':
+    def __enter__(self) -> "Service":
         """Authenticate to the service using SSL certificates."""
 
         credentials = {
             kind: os.path.expanduser(self.configuration[kind])
-            for kind in ('cert', 'ca', 'serverca')
+            for kind in ("cert", "ca", "serverca")
         }
 
         self.session.ssl_login(**credentials)
@@ -179,16 +165,12 @@ class Service(abc.Repository, abc.Builder):
 
         build_list = self.session.listTagged(tag_name)
         build_iter = map(BuiltPackage.from_mapping, build_list)
-        build_groups = groupby(sorted(build_iter), key=attrgetter('name'))
+        build_groups = groupby(sorted(build_iter), key=attrgetter("name"))
         latest_iter = starmap(lambda _name, group: max(group), build_groups)
 
         yield from latest_iter
 
-    def tag_entry_time(
-        self,
-        tag_name: str,
-        build: rpm.Metadata,
-    ) -> Optional[datetime]:
+    def tag_entry_time(self, tag_name: str, build: rpm.Metadata) -> Optional[datetime]:
         """Determine the entry time of a build into a tag.
 
         Keyword arguments:
@@ -205,7 +187,7 @@ class Service(abc.Repository, abc.Builder):
 
         # Fetch tag history for this build, and extract latest entry time
         history = self.session.tagHistory(tag=tag_name, build=build.id)
-        timestamp = max(map(itemgetter('create_ts'), history), default=None)
+        timestamp = max(map(itemgetter("create_ts"), history), default=None)
 
         if timestamp is None:
             return None
@@ -219,7 +201,7 @@ class Service(abc.Repository, abc.Builder):
         package: rpm.Metadata,
         target_dir: Path,
         *,
-        session: Optional[requests.Session] = None
+        session: Optional[requests.Session] = None,
     ) -> rpm.LocalPackage:
         """Download a single package from the service.
 
@@ -251,17 +233,19 @@ class Service(abc.Repository, abc.Builder):
         candidate_list = map(BuiltPackage.from_mapping, rpm_list)
 
         target_pkg, = (c for c in candidate_list if c.nevra == build.nevra)
-        target_url = '/'.join([
-            self.path_info.build(attr.asdict(build)),
-            self.path_info.rpm(attr.asdict(target_pkg)),
-        ])
+        target_url = "/".join(
+            [
+                self.path_info.build(attr.asdict(build)),
+                self.path_info.rpm(attr.asdict(target_pkg)),
+            ]
+        )
 
-        target_file_path = target_dir / target_url.rsplit('/')[-1]
+        target_file_path = target_dir / target_url.rsplit("/")[-1]
 
         response = session.get(target_url, stream=True)
         response.raise_for_status()
 
-        with target_file_path.open(mode='wb') as ostream:
+        with target_file_path.open(mode="wb") as ostream:
             for chunk in response.iter_content(chunk_size=256):
                 ostream.write(chunk)
 
@@ -325,9 +309,10 @@ class Service(abc.Repository, abc.Builder):
             return info
         else:
             message = (
-                'Build target "{target_name}" '
-                'is not handled by this service.'
-            ).format(target_name=target_name)
+                'Build target "{target_name}" ' "is not handled by this service."
+            ).format(
+                target_name=target_name
+            )
             raise ValueError(message)
 
     def __upload_srpm(self, source_package: rpm.LocalPackage) -> str:
@@ -340,18 +325,18 @@ class Service(abc.Repository, abc.Builder):
             Remote path to the uploaded package.
         """
 
-        remote_dir = '{timestamp:%Y-%m-%dT%H:%M:%S}-{package.nevra}'.format(
-            timestamp=datetime.now(timezone.utc),
-            package=source_package,
+        remote_dir = "{timestamp:%Y-%m-%dT%H:%M:%S}-{package.nevra}".format(
+            timestamp=datetime.now(timezone.utc), package=source_package
         )
 
-        logger.debug('Uploading {package.path} to {remote_dir}'.format(
-            package=source_package,
-            remote_dir=remote_dir,
-        ))
+        logger.debug(
+            "Uploading {package.path} to {remote_dir}".format(
+                package=source_package, remote_dir=remote_dir
+            )
+        )
         self.session.uploadWrapper(source_package.path, remote_dir)
 
-        return '/'.join((remote_dir, source_package.path.name))
+        return "/".join((remote_dir, source_package.path.name))
 
     def __queue_build(self, target: Mapping, remote_package_path: str) -> int:
         """Queue a build task of remote_package_path into target_name.
@@ -365,16 +350,12 @@ class Service(abc.Repository, abc.Builder):
         """
 
         logger.debug(
-            'Starting build of {remote_package} to {target[name]}'.format(
-                remote_package=remote_package_path.rpartition('/')[-1],
-                target=target,
+            "Starting build of {remote_package} to {target[name]}".format(
+                remote_package=remote_package_path.rpartition("/")[-1], target=target
             )
         )
 
-        return self.session.build(
-            remote_package_path,
-            target['name'],
-        )
+        return self.session.build(remote_package_path, target["name"])
 
     def __watch_task(
         self,
@@ -400,7 +381,7 @@ class Service(abc.Repository, abc.Builder):
         def name_state(task_info: Mapping) -> Optional[int]:
             """Extract the name of the state from the task info, if present."""
 
-            state_number = task_info.get('state', None)
+            state_number = task_info.get("state", None)
             return koji.TASK_STATES.get(state_number, None)
 
         def log_state(task_info: Mapping) -> None:
@@ -410,25 +391,25 @@ class Service(abc.Repository, abc.Builder):
                 return
 
             COLORS = {
-                'FREE': dict(fg='cyan'),
-                'OPEN': dict(fg='yellow'),
-                'CLOSED': dict(fg='green'),
-                'CANCELED': dict(fg='yellow', bold=True),
-                'ASSIGNED': dict(fg='magenta'),
-                'FAILED': dict(fg='red', bold=True),
+                "FREE": dict(fg="cyan"),
+                "OPEN": dict(fg="yellow"),
+                "CLOSED": dict(fg="green"),
+                "CANCELED": dict(fg="yellow", bold=True),
+                "ASSIGNED": dict(fg="magenta"),
+                "FAILED": dict(fg="red", bold=True),
             }
 
             state_name = name_state(task_info)
 
-            message = 'Build task {id} [{nevra}]: {state_name}'.format(
-                id=task_info['id'],
-                nevra=built_package.nevra if built_package else 'unknown',
+            message = "Build task {id} [{nevra}]: {state_name}".format(
+                id=task_info["id"],
+                nevra=built_package.nevra if built_package else "unknown",
                 state_name=state_name,
             )
 
             logger.info(style(message, **COLORS[state_name]))
 
-        END_STATE_SET = {'CLOSED', 'CANCELED', 'FAILED'}
+        END_STATE_SET = {"CLOSED", "CANCELED", "FAILED"}
 
         task_info = self.session.getTaskInfo(task_id)
         log_state(task_info)
@@ -438,19 +419,15 @@ class Service(abc.Repository, abc.Builder):
             time.sleep(poll_interval)
 
             new_info = self.session.getTaskInfo(task_id)
-            if new_info['state'] != task_info['state']:
+            if new_info["state"] != task_info["state"]:
                 log_state(new_info)
 
             task_info = new_info
 
-        return task_info['state']
+        return task_info["state"]
 
     def build(
-        self,
-        target: str,
-        source_package: rpm.LocalPackage,
-        *,
-        poll_interval: int = 5
+        self, target: str, source_package: rpm.LocalPackage, *, poll_interval: int = 5
     ) -> BuiltPackage:
         """Build package using the service.
 
@@ -472,16 +449,14 @@ class Service(abc.Repository, abc.Builder):
         remote_package = self.__upload_srpm(source_package)
         build_task_id = self.__queue_build(target, remote_package)
         result = self.__watch_task(
-            build_task_id,
-            poll_interval=poll_interval,
-            built_package=source_package,
+            build_task_id, poll_interval=poll_interval, built_package=source_package
         )
-        success = result == koji.TASK_STATES['CLOSED']
+        success = result == koji.TASK_STATES["CLOSED"]
 
         if success:
             build_params = {
                 key: getattr(source_package, key)
-                for key in ('name', 'version', 'release', 'epoch')
+                for key in ("name", "version", "release", "epoch")
             }
             built_metadata = self.session.getBuild(build_params, strict=True)
             return BuiltPackage.from_mapping(built_metadata)
@@ -490,5 +465,5 @@ class Service(abc.Repository, abc.Builder):
             try:
                 self.session.getTaskResult(build_task_id)  # always raise
             except koji.GenericError as original:  # extract the reason
-                reason = original.args[0].partition(':')[0]  # up to first :
+                reason = original.args[0].partition(":")[0]  # up to first :
                 raise abc.BuildFailure(source_package, reason) from None

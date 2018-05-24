@@ -50,7 +50,7 @@ def load_configuration(
 
     with ExitStack() as opened:
         system = map(opened.enter_context, open_config_files(glob))
-        bundle = map(opened.enter_context, open_resource_files('conf.d', glob))
+        bundle = map(opened.enter_context, open_resource_files("conf.d", glob))
         streams = chain(system, bundle)
 
         interpreted = map(interpret, streams)
@@ -62,6 +62,7 @@ def load_configuration(
 #
 # Data classes
 #
+
 
 @attr.s(slots=True, frozen=True)
 class SCL:
@@ -81,25 +82,16 @@ class Package:
     scl = attr.ib(validator=instance_of(SCL))
 
     #: RPM metadata of the package
-    metadata = attr.ib(
-        validator=optional(instance_of(rpm.Metadata)),
-        default=None,
-    )
+    metadata = attr.ib(validator=optional(instance_of(rpm.Metadata)), default=None)
 
     # TODO: Get rid of the following attributes;
     # they are properties of COMMAND, not package
 
     #: The source group for this package
-    source = attr.ib(
-        default=None,
-        validator=optional(instance_of(Mapping)),
-        cmp=False,
-    )
+    source = attr.ib(default=None, validator=optional(instance_of(Mapping)), cmp=False)
     #: The destination group for this package
     destination = attr.ib(
-        default=None,
-        validator=optional(instance_of(Mapping)),
-        cmp=False,
+        default=None, validator=optional(instance_of(Mapping)), cmp=False
     )
 
 
@@ -109,9 +101,7 @@ class PackageStream:
 
     #: Internal storage for the packages
     _container = attr.ib(
-        default=frozenset(),
-        validator=instance_of(frozenset),
-        convert=frozenset,
+        default=frozenset(), validator=instance_of(frozenset), convert=frozenset
     )
 
     def __iter__(self):
@@ -170,10 +160,7 @@ class PackageStream:
         )
 
 
-def stream_processor(
-    command: Optional[Callable] = None,
-    **option_kind,
-) -> Callable:
+def stream_processor(command: Optional[Callable] = None, **option_kind) -> Callable:
     """Command decorator for processing a package stream.
 
     This decorator adjust the Package iterator
@@ -194,11 +181,7 @@ def stream_processor(
 
     @wraps(command)
     @click.pass_context
-    def wrapper(
-        context,
-        *command_args,
-        **command_kwargs,
-    ):
+    def wrapper(context, *command_args, **command_kwargs):
         """Command wrapper in charge of service selection.
 
         The responsibility is twofold:
@@ -213,13 +196,12 @@ def stream_processor(
             process.
         """
 
-        log = LOG.getChild('stream_processor')
+        log = LOG.getChild("stream_processor")
 
         configuration = context.obj
         log.debug(
-            '{cmd.__name__} configuration: {conf}'.format(
-                cmd=command,
-                conf=configuration,
+            "{cmd.__name__} configuration: {conf}".format(
+                cmd=command, conf=configuration
             )
         )
 
@@ -238,10 +220,9 @@ def stream_processor(
             """Process all format strings."""
 
             for group in filter(None, (package.source, package.destination)):
-                for key in (group.keys() & {'tags', 'targets', 'tests'}):
+                for key in group.keys() & {"tags", "targets", "tests"}:
                     group[key] = [
-                        l.format_map(attr.asdict(package.scl))
-                        for l in group[key]
+                        l.format_map(attr.asdict(package.scl)) for l in group[key]
                     ]
 
             return package
@@ -264,11 +245,10 @@ def stream_processor(
             stream = map(locate_service, stream)
             stream = map(format_labels, stream)
 
-            return context.invoke(
-                command, stream, *command_args, **command_kwargs,
-            )
+            return context.invoke(command, stream, *command_args, **command_kwargs)
 
         return processor  # wrapper returns processor
+
     return wrapper  # stream_processor returns wrapper
 
 
@@ -299,10 +279,12 @@ def stream_generator(command: Callable = None, **option_kind):
         @wraps(command)
         def generator(stream: Iterator[Package]) -> Iterator[Package]:
             # Group the packages, discard metadata
-            groupings = groupby(stream, attrgetter('scl'))
+            groupings = groupby(stream, attrgetter("scl"))
             keys = map(itemgetter(0), groupings)
             placeholders = (Package(scl=scl) for scl in keys)
 
             return processor(placeholders)
+
         return generator
+
     return wrapper

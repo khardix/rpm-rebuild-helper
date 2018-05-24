@@ -13,11 +13,7 @@ from .. import RESOURCE_ID
 
 
 def open_resource_files(
-    root_dir: str,
-    glob: str,
-    *,
-    encoding: str = 'utf-8',
-    package: str = RESOURCE_ID
+    root_dir: str, glob: str, *, encoding: str = "utf-8", package: str = RESOURCE_ID
 ) -> Iterator[TextIO]:
     """Open package resources text files.
 
@@ -34,13 +30,9 @@ def open_resource_files(
     base_names = resource_listdir(package, root_dir)
     match_names = fnmatch.filter(base_names, glob)
     binary_streams = (
-        resource_stream(package, '/'.join((root_dir, name)))
-        for name in match_names
+        resource_stream(package, "/".join((root_dir, name))) for name in match_names
     )
-    text_streams = (
-        TextIOWrapper(bs, encoding=encoding)
-        for bs in binary_streams
-    )
+    text_streams = (TextIOWrapper(bs, encoding=encoding) for bs in binary_streams)
 
     yield from text_streams
 
@@ -50,7 +42,7 @@ def open_config_files(
     glob: str,
     search_path_seq: Optional[Sequence[Path]] = None,
     *,
-    encoding: str = 'utf-8'
+    encoding: str = "utf-8"
 ) -> Iterator[TextIO]:
     """Open user configuration files.
 
@@ -67,9 +59,7 @@ def open_config_files(
     if search_path_seq is None:
         search_path_seq = map(Path, load_config_paths(RESOURCE_ID))
 
-    conf_file_paths = chain.from_iterable(
-        pth.glob(glob) for pth in search_path_seq,
-    )
+    conf_file_paths = chain.from_iterable(pth.glob(glob) for pth in search_path_seq)
     conf_files = (pth.open(encoding=encoding) for pth in conf_file_paths)
 
     yield from conf_files

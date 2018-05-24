@@ -17,7 +17,7 @@ class SystemImportError(ClickException):
             user_msg: The message that should be presented to user.
         """
 
-        super().__init__('System Import Error: {!s}'.format(user_msg))
+        super().__init__("System Import Error: {!s}".format(user_msg))
 
 
 def system_import(module_name: str, *attribute_names) -> Any:
@@ -52,7 +52,6 @@ def system_import(module_name: str, *attribute_names) -> Any:
 
     except AttributeError as err:
         message = 'System module "{module}" does not provide "{attribute}"'
-        raise SystemImportError(message.format(
-            module=module_name,
-            attribute=err.args[0],
-        ))
+        raise SystemImportError(
+            message.format(module=module_name, attribute=err.args[0])
+        )

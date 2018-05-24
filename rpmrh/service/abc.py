@@ -38,11 +38,7 @@ class Repository(metaclass=ABCMeta):
             Metadata for all latest builds within the tag.
         """
 
-    def tag_entry_time(
-        self,
-        tag_name: str,
-        build: rpm.Metadata,
-    ) -> Optional[datetime]:
+    def tag_entry_time(self, tag_name: str, build: rpm.Metadata) -> Optional[datetime]:
         """Determine the entry time of a build into a tag.
 
         Keyword arguments:
@@ -58,10 +54,8 @@ class Repository(metaclass=ABCMeta):
                 Entry time query is not supported on this repository type.
         """
 
-        message = 'Tag entry time query unsupported by {class_name}'
-        raise NotImplementedError(message.format(
-            class_name=type(self).__name__,
-        ))
+        message = "Tag entry time query unsupported by {class_name}"
+        raise NotImplementedError(message.format(class_name=type(self).__name__))
 
     @abstractmethod
     def download(
@@ -98,7 +92,7 @@ class BuildFailure(Exception):
         super(BuildFailure, self).__init__(*attr.astuple(self))
 
     def __str__(self):
-        return '{s.package.nvr}: {s.reason}'.format(s=self)
+        return "{s.package.nvr}: {s.reason}".format(s=self)
 
 
 class Builder(ContextDecorator, metaclass=ABCMeta):
@@ -116,11 +110,7 @@ class Builder(ContextDecorator, metaclass=ABCMeta):
         """Set of target prefixes associated with this Builder."""
 
     @abstractmethod
-    def build(
-        self,
-        target_name: str,
-        source_package: rpm.LocalPackage
-    ) -> rpm.Metadata:
+    def build(self, target_name: str, source_package: rpm.LocalPackage) -> rpm.Metadata:
         """Build a source package using this Builder.
 
         Keyword arguments:
