@@ -26,21 +26,20 @@ class UnknownJob(ClickException):
         server_url: str,
         job_name: str,
         *,
-        message_format: str = '[{server_url}]: Job {job_name} not found',
+        message_format: str = "[{server_url}]: Job {job_name} not found",
     ):
         """Format the error message"""
 
-        super().__init__(message_format.format(
-            server_url=server_url,
-            job_name=job_name,
-        ))
+        super().__init__(
+            message_format.format(server_url=server_url, job_name=job_name)
+        )
 
 
 class NoSourcePackages(RuntimeError):
     """No source package listing was found in the build outputs."""
 
 
-@service.register('jenkins', initializer='configure')
+@service.register("jenkins", initializer="configure")
 @attr.s(slots=True, frozen=True)
 class Server:
     """Thin wrapper around Jenkins API"""
@@ -66,10 +65,7 @@ class Server:
             New instance of Server object.
         """
 
-        return cls(
-            handle=jenkins.Jenkins(url),
-            **attributes,
-        )
+        return cls(handle=jenkins.Jenkins(url), **attributes)
 
     def tested_packages(self, job_name) -> Set[rpm.Metadata]:
         """Provide set of packages successfully tested by the specified job.
@@ -87,26 +83,26 @@ class Server:
         """
 
         try:
-            build = self._handle.get_job_info(job_name)['lastSuccessfulBuild']
+            build = self._handle.get_job_info(job_name)["lastSuccessfulBuild"]
         except jenkins.NotFoundException as exc:
             raise UnknownJob(self._handle.server, job_name) from exc
 
         if build is None:  # No successful build
-            LOG.debug('No successful build for {} found'.format(job_name))
+            LOG.debug("No successful build for {} found".format(job_name))
             return frozenset()
 
-        log_url = urljoin(build['url'], 'artifact/results/source-packages.txt')
+        log_url = urljoin(build["url"], "artifact/results/source-packages.txt")
 
         try:
             response = self._session.get(log_url, stream=True)
             response.raise_for_status()
         except requests.HTTPError as error:
-            message = '{job}#{number}: Cannot open source packages: {reason}'
-            raise NoSourcePackages(message.format(
-                job=job_name,
-                number=build['number'],
-                reason=error.response.reason,
-            )) from error
+            message = "{job}#{number}: Cannot open source packages: {reason}"
+            raise NoSourcePackages(
+                message.format(
+                    job=job_name, number=build["number"], reason=error.response.reason
+                )
+            ) from error
 
         return frozenset(
             rpm.Metadata.from_nevra(line)

@@ -12,8 +12,8 @@ from .. import rpm
 from ..configuration import service
 from ..util import system_import, default_requests_session
 
-dnf = system_import('dnf')
-DNFPackage = system_import('dnf.package', 'Package')
+dnf = system_import("dnf")
+DNFPackage = system_import("dnf.package", "Package")
 
 
 def convert_metadata(package: DNFPackage) -> rpm.Metadata:
@@ -37,7 +37,7 @@ def convert_metadata(package: DNFPackage) -> rpm.Metadata:
     return rpm.Metadata(**{a: getattr(package, a) for a in attributes})
 
 
-@service.register('dnf', initializer='configured')
+@service.register("dnf", initializer="configured")
 @attr.s(slots=True, frozen=True)
 class RepoGroup(abc.Repository):
     """Group of managed DNF repositories."""
@@ -61,9 +61,9 @@ class RepoGroup(abc.Repository):
         for config in repo_configs:
             # Convert arguments to proper API
             arguments = {
-                'repoid': config.pop('name'),
-                'conf': base.conf,
-                'baseurl': [config.pop('baseurl')],
+                "repoid": config.pop("name"),
+                "conf": base.conf,
+                "baseurl": [config.pop("baseurl")],
             }
 
             base.repos.add_new_repo(**arguments, **config)
@@ -117,18 +117,20 @@ class RepoGroup(abc.Repository):
         self.base.fill_sack(load_system_repo=False)
 
         query = self.base.sack.query()
-        candidate, = query.filter(**attr.asdict(
-            package,
-            # filter=attr.filters.include(*attr.fields(rpm.Metadata)),
-            filter=lambda attrib, _val: attrib in attr.fields(rpm.Metadata),
-        ))
+        candidate, = query.filter(
+            **attr.asdict(
+                package,
+                # filter=attr.filters.include(*attr.fields(rpm.Metadata)),
+                filter=lambda attrib, _val: attrib in attr.fields(rpm.Metadata),
+            )
+        )
         source_url = candidate.remote_location()
 
         response = session.get(source_url, stream=True)
         response.raise_for_status()
 
-        target_path = target_dir / source_url.rsplit('/')[-1]
-        with target_path.open(mode='wb') as ostream:
+        target_path = target_dir / source_url.rsplit("/")[-1]
+        with target_path.open(mode="wb") as ostream:
             for chunk in response.iter_content(chunk_size=256):
                 ostream.write(chunk)
 
