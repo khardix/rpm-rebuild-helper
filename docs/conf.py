@@ -6,14 +6,15 @@
 # full list see the documentation:
 # http://www.sphinx-doc.org/en/stable/config
 
+import sys
+from os import path
+from pkg_resources import get_distribution
+
 # -- Path setup --------------------------------------------------------------
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-
-import sys
-from os import path
 
 sys.path.insert(0, path.abspath(".."))
 
@@ -24,10 +25,10 @@ project = "RPM Rebuild Helper"
 copyright = "2018, Jan Staněk"
 author = "Jan Staněk"
 
-# The short X.Y version
-version = "unknown dev"
 # The full version, including alpha/beta/rc tags
-release = ""
+release = get_distribution("rpmrh").version
+# The short X.Y version
+version = ".".join(release.split(".")[:2])
 
 
 # -- General configuration ---------------------------------------------------
