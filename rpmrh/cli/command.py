@@ -46,9 +46,9 @@ util.logging.basic_config(logger)
     "--el",
     "-e",
     "el_seq",
-    type=click.IntRange(6),
+    type=click.IntRange(6, None),
     multiple=True,
-    default=[7],
+    default=[6, 7],
     help="Major EL version (can be used multiple times).",
 )
 @click.option(
