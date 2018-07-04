@@ -239,28 +239,32 @@ def diff(package_stream, min_days, simple_dist):
 
     # SCL processing
     for pkg in package_stream:
-        destination_builds = latest_builds(pkg.destination)
-        source_builds = latest_builds(pkg.source)
+        try:
+            destination_builds = latest_builds(pkg.destination)
+            source_builds = latest_builds(pkg.source)
 
-        log.info("Comparing {s.collection}-el{s.el}".format(s=pkg.scl))
+            log.info("Comparing {s.collection}-el{s.el}".format(s=pkg.scl))
 
-        # Packages present in destination
-        present = {
-            build.name: build
-            for build in destination_builds
-            if build.name.startswith(pkg.scl.collection)
-        }
+            # Packages present in destination
+            present = {
+                build.name: build
+                for build in destination_builds
+                if build.name.startswith(pkg.scl.collection)
+            }
 
-        missing = {
-            build
-            for build in source_builds
-            if build.name.startswith(pkg.scl.collection)
-            and not obsolete(build, present)
-        }
+            missing = {
+                build
+                for build in source_builds
+                if build.name.startswith(pkg.scl.collection)
+                and not obsolete(build, present)
+            }
 
-        ready = filter(lambda build: old_enough(build, pkg.source), missing)
+            ready = filter(lambda build: old_enough(build, pkg.source), missing)
 
-        yield from (attr.evolve(pkg, metadata=package) for package in ready)
+            yield from (attr.evolve(pkg, metadata=package) for package in ready)
+
+        except Exception as err:
+            log.error(err)
 
 
 @main.command()
