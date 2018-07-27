@@ -84,7 +84,11 @@ class Server:
 
         try:
             build = self._handle.get_job_info(job_name)["lastSuccessfulBuild"]
-        except jenkins.NotFoundException as exc:
+        except (
+            jenkins.NotFoundException,
+            jenkins.JenkinsException,
+            requests.exceptions.HTTPError,
+        ) as exc:
             raise UnknownJob(self._handle.server, job_name) from exc
 
         if build is None:  # No successful build
