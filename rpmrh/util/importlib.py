@@ -4,10 +4,8 @@ from importlib import import_module
 from operator import attrgetter
 from typing import Any
 
-from click import ClickException
 
-
-class SystemImportError(ClickException):
+class SystemImportError(ImportError):
     """User-friendly indicator of missing system libraries."""
 
     def __init__(self, user_msg: str):
@@ -40,9 +38,9 @@ def system_import(module_name: str, *attribute_names) -> Any:
     try:
         module = import_module(module_name)
 
-    except ImportError:
+    except ImportError as err:
         message = 'System module "{}" is not available'.format(module_name)
-        raise SystemImportError(message)
+        raise SystemImportError(message) from err
 
     if not attribute_names:
         return module
@@ -54,4 +52,4 @@ def system_import(module_name: str, *attribute_names) -> Any:
         message = 'System module "{module}" does not provide "{attribute}"'
         raise SystemImportError(
             message.format(module=module_name, attribute=err.args[0])
-        )
+        ) from err
