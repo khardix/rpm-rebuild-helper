@@ -13,7 +13,7 @@ class UserError(click.ClickException):
         """Pretty-print the error message."""
 
         if file is None:
-            file = click.get_text_stderr()
+            file = click.get_text_stream("stderr", encoding="utf-8")
 
         fields = {
             "lead": click.style(self.lead, fg="red"), "message": self.format_message()
