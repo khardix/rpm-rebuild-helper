@@ -18,11 +18,17 @@ from .tooling import load_configuration, stream_processor, stream_generator
 from .. import RESOURCE_ID, util, rpm, configuration
 from ..service.abc import BuildFailure
 from ..service.jenkins import UnknownJob
+from ..exception import UserError
 
 
 # Logging setup
 logger = logging.getLogger(RESOURCE_ID)
 util.logging.basic_config(logger)
+
+
+# TODO Unify with other configuration errors
+class ConfigurationMismatch(UserError):
+    lead = "Configuration mismatch"
 
 
 # Commands
@@ -105,14 +111,14 @@ def main(context, source, destination, **_options):
             skeleton = phase[phase_name]
         except KeyError as err:
             message = "Unknown phase: {!s}".format(err)
-            raise click.ClickException(message) from None
+            raise ConfigurationMismatch(message) from None
 
         try:
             for kind in skeleton.values():
                 kind["service"] = service[kind["service"]]
         except KeyError as err:
             message = "Unknown service: {!s}".format(err)
-            raise click.ClickException(message) from None
+            raise ConfigurationMismatch(message) from None
 
         return skeleton
 

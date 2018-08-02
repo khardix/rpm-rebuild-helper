@@ -3,11 +3,14 @@
 from typing import Mapping, Optional
 
 import cerberus
-import click
+
+from ..exception import UserError
 
 
-class InvalidConfiguration(click.ClickException):
+class InvalidConfiguration(UserError):
     """A configuration map did not pass a validity check."""
+
+    lead = "Configuration error"
 
 
 def validate(

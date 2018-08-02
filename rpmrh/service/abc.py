@@ -11,6 +11,7 @@ import requests
 from attr.validators import instance_of
 
 from .. import rpm
+from ..exception import UserError
 
 
 @attr.s(slots=True, frozen=True)
@@ -78,8 +79,10 @@ class Repository(metaclass=ABCMeta):
 
 
 @attr.s(slots=True, frozen=True)
-class BuildFailure(Exception):
+class BuildFailure(UserError):
     """Indicate build failure."""
+
+    lead = "Build failure"
 
     #: The package that failed to build
     package = attr.ib(validator=instance_of(rpm.Metadata))
@@ -89,10 +92,13 @@ class BuildFailure(Exception):
     def __attr_post_init__(self):
         """Initialize super-class"""
 
-        super(BuildFailure, self).__init__(*attr.astuple(self))
+        super(BuildFailure, self).__init__(self.reason)
 
     def __str__(self):
         return "{s.package.nvr}: {s.reason}".format(s=self)
+
+    def format_message(self):
+        return str(self)
 
 
 class Builder(ContextDecorator, metaclass=ABCMeta):
