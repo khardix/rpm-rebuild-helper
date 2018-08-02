@@ -8,31 +8,33 @@ import attr
 import jenkins
 import requests
 from attr.validators import instance_of
-from click import ClickException
 
 from .. import rpm, util
 from ..configuration import service
+from ..exception import UserError
 
 
 LOG = logging.getLogger(__name__)
 
 
-# TODO Unify exceptions
-class UnknownJob(ClickException):
+@attr.s(slots=True, frozen=True)
+class UnknownJob(UserError):
     """No job with specified name was found on the server."""
 
-    def __init__(
-        self,
-        server_url: str,
-        job_name: str,
-        *,
-        message_format: str = "[{server_url}]: Job {job_name} not found",
-    ):
-        """Format the error message"""
+    lead = "Jenkins error"
 
-        super().__init__(
-            message_format.format(server_url=server_url, job_name=job_name)
-        )
+    #: URL of the queried server
+    server_url = attr.ib(validator=instance_of(str))
+
+    #: Name of the missing job
+    job_name = attr.ib(validator=instance_of(str))
+
+    def __attr_post_init__(self):
+        super(UnknownJob, self).__init__(self.format_message())
+
+    def format_message(self):
+        fmt = "No job named {job_name} found at {server_url}"
+        return fmt.format_map(attr.asdict(self))
 
 
 class NoSourcePackages(RuntimeError):
@@ -89,7 +91,7 @@ class Server:
             jenkins.JenkinsException,
             requests.exceptions.HTTPError,
         ) as exc:
-            raise UnknownJob(self._handle.server, job_name) from exc
+            raise UnknownJob(str(self._handle.server), job_name) from exc
 
         if build is None:  # No successful build
             LOG.debug("No successful build for {} found".format(job_name))
