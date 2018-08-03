@@ -16,3 +16,7 @@ ipython = "*"
 pytest-mock = "*"
 sphinx = "*"
 sphinx-autobuild = "*"
+
+[scripts]
+test = "python -m pytest -x"
+tests = "python -m pytest"
