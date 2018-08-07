@@ -17,7 +17,7 @@ from ruamel import yaml
 from attr.validators import optional, instance_of
 
 from .. import rpm
-from ..util.filesystem import open_resource_files, open_config_files
+from ..configuration._loading import open_matching_resources, open_matching_files
 
 
 LOG = logging.getLogger(__name__)
@@ -49,8 +49,8 @@ def load_configuration(
     """
 
     with ExitStack() as opened:
-        system = map(opened.enter_context, open_config_files(glob))
-        bundle = map(opened.enter_context, open_resource_files("conf.d", glob))
+        system = map(opened.enter_context, open_matching_files(glob))
+        bundle = map(opened.enter_context, open_matching_resources(glob))
         streams = chain(system, bundle)
 
         interpreted = map(interpret, streams)
