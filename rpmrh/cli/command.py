@@ -1,7 +1,7 @@
 """Command Line Interface for the package"""
 
 import logging
-from collections import defaultdict, OrderedDict, ChainMap
+from collections import defaultdict, OrderedDict
 from datetime import timedelta, datetime, timezone
 from functools import reduce, lru_cache
 from itertools import product, chain
@@ -14,8 +14,9 @@ import click
 from ruamel import yaml
 
 from .tooling import SCL, Package, PackageStream
-from .tooling import load_configuration, stream_processor, stream_generator
+from .tooling import stream_processor, stream_generator
 from .. import RESOURCE_ID, util, rpm, configuration
+from ..configuration._loading import load_matching_configuration
 from ..service.abc import BuildFailure
 from ..service.jenkins import UnknownJob
 from ..exception import UserError
@@ -87,15 +88,11 @@ def main(context, source, destination, **_options):
     log = logger.getChild("main_setup")
 
     # Load configured phases
-    phase = ChainMap(
-        *load_configuration(glob="*.phase.toml", validate=configuration.phase.validate)
-    )
+    phase = configuration.phase.validate(load_matching_configuration("*.phase.toml"))
 
     # Load service configuration
-    service_conf = ChainMap(
-        *load_configuration(
-            glob="*.service.toml", validate=configuration.service.validate
-        )
+    service_conf = configuration.service.validate(
+        load_matching_configuration("*.service.toml")
     )
     service = {
         name: configuration.service.make_instance(conf)
@@ -103,7 +100,7 @@ def main(context, source, destination, **_options):
     }
 
     # Fill configuration dictionary
-    context.obj = ChainMap(*load_configuration("config.toml"))
+    context.obj = load_matching_configuration("config.toml")
     log.debug("configuration:", dict(context.obj))
 
     def extract_services(phase_name: str) -> dict:
@@ -219,7 +216,7 @@ def diff(package_stream, min_days, simple_dist):
             return builds
 
     def obsolete(package, target_map):
-        return (package.name in target_map and target_map[package.name] >= package)
+        return package.name in target_map and target_map[package.name] >= package
 
     def old_enough(package, source_map):
         # Skip this check if not explicitly requested

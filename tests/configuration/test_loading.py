@@ -42,3 +42,20 @@ def test_load_conf_files_open_correct_files():
     assert all(f.content == "OK" for f in file_list), file_list
     # All files have expected names
     assert all("service.toml" in f.name for f in file_list), file_list
+
+
+@pytest.mark.usefixtures("mock_package_resources", "mock_config_files")
+def test_load_configuration_loads_correct_sources():
+    """Only requested configuration sources are processed."""
+
+    def interpret(stream):
+        return {stream.name: stream.read()}
+
+    conf_map = conf_loading.load_matching_configuration(
+        glob="*.service.toml", interpret=interpret
+    )
+
+    # Only correct files are loaded
+    assert all(value == "OK" for value in conf_map.values())
+    # Multiple files are processed
+    assert len(conf_map) > 1

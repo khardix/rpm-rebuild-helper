@@ -1,12 +1,15 @@
 """Loading of configuration files from package and file system"""
 
 import fnmatch
+from collections import ChainMap
+from contextlib import ExitStack
 from io import TextIOWrapper
 from itertools import chain
-from typing import Iterator, Optional, Sequence, TextIO
+from typing import Callable, Iterator, Mapping, Optional, Sequence, TextIO
 from pathlib import Path
 from pkg_resources import resource_listdir, resource_stream
 
+import toml
 from xdg.BaseDirectory import load_config_paths
 
 from .. import RESOURCE_ID
@@ -69,3 +72,28 @@ def open_matching_files(
         directory.glob(glob) for directory in search_path_seq
     )
     yield from (match.open(encoding=encoding) for match in match_iter)
+
+
+def load_matching_configuration(
+    glob: str, *, interpret: Callable[[TextIO], Mapping] = toml.load
+) -> ChainMap:
+    """Load configuration from all matching files/resources.
+
+    The configuration is merged to single Mapping, with specific configuration
+    overriding more generic one.
+
+    Keyword arguments:
+        glob: The glob describing the configuration files/resources to open.
+        interpret: Converter from text to Python data types.
+
+    Returns:
+        Configuration data merged into single ChainMap.
+    """
+
+    with ExitStack() as to_close:
+        file_iter = open_matching_files(glob)
+        resource_iter = open_matching_resources(glob)
+        stream_iter = map(to_close.enter_context, chain(file_iter, resource_iter))
+        data_iter = map(interpret, stream_iter)
+
+        return ChainMap(*data_iter)
