@@ -32,10 +32,7 @@ def raw_package(base, minimal_srpm_path):
 def repo_configuration(minimal_repository_url):
     """Provide repository configuration"""
 
-    return {
-        'name': 'test-repo',
-        'baseurl': minimal_repository_url,
-    }
+    return {"name": "test-repo", "baseurl": minimal_repository_url}
 
 
 @pytest.fixture
@@ -58,7 +55,7 @@ def test_package_is_converted(raw_package):
 def test_repo_builds_are_reported(configured_group, minimal_srpm_path):
     """Builds in configured repos are reported."""
 
-    builds = list(configured_group.latest_builds('test-repo'))
+    builds = list(configured_group.latest_builds("test-repo"))
 
     assert len(builds) == 1
 
@@ -68,14 +65,10 @@ def test_repo_builds_are_reported(configured_group, minimal_srpm_path):
     assert build == rpm.LocalPackage.from_path(minimal_srpm_path)
 
 
-def test_packages_are_downloaded(
-    configured_group,
-    minimal_srpm_path,
-    tmpdir_factory
-):
+def test_packages_are_downloaded(configured_group, minimal_srpm_path, tmpdir_factory):
     """Packages can be downloaded from the repo"""
 
-    target_dir = Path(str(tmpdir_factory.mktemp('dnf-download')))
+    target_dir = Path(str(tmpdir_factory.mktemp("dnf-download")))
     request = rpm.LocalPackage.from_path(minimal_srpm_path)
 
     result = configured_group.download(request, target_dir)

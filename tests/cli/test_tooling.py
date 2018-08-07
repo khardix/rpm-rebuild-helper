@@ -15,16 +15,13 @@ def package_stream():
     """Prepared package stream"""
 
     metadata = [
-        rpm.Metadata(name='test', version='2.1', release='3.el7'),
-        rpm.Metadata(name='abcde', version='1.0', release='1.el7'),
-        rpm.Metadata(name='abcde', version='2.0', release='1.el7'),
+        rpm.Metadata(name="test", version="2.1", release="3.el7"),
+        rpm.Metadata(name="abcde", version="1.0", release="1.el7"),
+        rpm.Metadata(name="abcde", version="2.0", release="1.el7"),
     ]
 
     return tooling.PackageStream(
-        tooling.Package(
-            scl=tooling.SCL(collection='test', el=7),
-            metadata=m,
-        )
+        tooling.Package(scl=tooling.SCL(collection="test", el=7), metadata=m)
         for m in metadata
     )
 
@@ -47,16 +44,14 @@ def yaml_structure(package_stream):
 def phase():
     """Filled test registry"""
 
-    Service = namedtuple('Service', ['identification'])
-    return {
-        'repo': {'service': Service('simple'), 'tags': ['simple-tag']},
-    }
+    Service = namedtuple("Service", ["identification"])
+    return {"repo": {"service": Service("simple"), "tags": ["simple-tag"]}}
 
 
 def make_command(function, phase):
     """Turn a function into click Command"""
 
-    context_settings = dict(obj={'source': phase})
+    context_settings = dict(obj={"source": phase})
 
     decorator = click.command(context_settings=context_settings)
     return decorator(function)
@@ -66,10 +61,7 @@ def make_command(function, phase):
 def process_command(phase):
     """Dummy click command for tests of stream processing"""
 
-    processor = tooling.stream_processor(
-        lambda stream: stream,
-        source='repo',
-    )
+    processor = tooling.stream_processor(lambda stream: stream, source="repo")
 
     return make_command(processor, phase)
 
@@ -78,10 +70,7 @@ def process_command(phase):
 def generate_command(phase):
     """Dummy click command for tests of stream generation"""
 
-    generator = tooling.stream_generator(
-        lambda stream: stream,
-        source='repo',
-    )
+    generator = tooling.stream_generator(lambda stream: stream, source="repo")
 
     return make_command(generator, phase)
 
@@ -123,11 +112,11 @@ def test_stream_expansion(process_command, package_stream):
     """All packages in a stream are expanded as expected"""
 
     # Manually apply the decorator
-    ctx = process_command.make_context('test_stream_expansion', [])
+    ctx = process_command.make_context("test_stream_expansion", [])
     stream = ctx.invoke(process_command)(package_stream)
 
     def valid_package(package):
-        valid_source = package.source['service'].identification == 'simple'
+        valid_source = package.source["service"].identification == "simple"
         valid_destination = package.destination is None
         valid_metadata = package.metadata is not None
 
@@ -139,11 +128,11 @@ def test_stream_expansion(process_command, package_stream):
 def test_stream_generation(generate_command, package_stream):
     """Generator provides appropriate empty collections"""
 
-    ctx = generate_command.make_context('test_stream_generation', [])
+    ctx = generate_command.make_context("test_stream_generation", [])
     stream = list(ctx.invoke(generate_command)(package_stream))
 
     def valid_package(package):
-        source = package.source['service'].identification == 'simple'
+        source = package.source["service"].identification == "simple"
         destination = package.destination is None
         metadata = package.metadata is None
 
