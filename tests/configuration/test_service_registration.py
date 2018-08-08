@@ -63,3 +63,20 @@ def test_instance_can_be_made(type_registry):
     )
 
     assert obj.name == "make"
+
+
+def test_instance_map_can_be_made(type_registry):
+    """Instances can be created from configuration mapping."""
+
+    service.register("test", registry=type_registry)(Service)
+
+    config_map = {
+        "foo": {"type": "test", "name": "foo"},
+        "bar": {"type": "test", "name": "bar"},
+    }
+
+    instance_map = service.make_instance_map(config_map, registry=type_registry)
+
+    assert config_map.keys() == instance_map.keys()
+    assert all(isinstance(obj, Service) for obj in instance_map.values())
+    assert all(service.name == key for key, service in instance_map.items())

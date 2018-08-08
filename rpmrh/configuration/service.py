@@ -2,7 +2,7 @@
 
 from functools import partial
 from typing import Optional, Type
-from typing import Callable, MutableMapping
+from typing import Any, Callable, Dict, Mapping, MutableMapping
 
 from ._validation import validate, InvalidConfiguration  # noqa: F401
 
@@ -87,6 +87,26 @@ def make_instance(
 
     type_name = configuration_map.pop("type")
     return registry[type_name](**configuration_map)
+
+
+def make_instance_map(
+    service_map: Mapping[str, Mapping], *, registry: MutableMapping = KNOWN_TYPES
+) -> Dict[str, Any]:
+    """Instantiate all configured services.
+
+    Keyword arguments:
+        service_map: The service configuration as raw data.
+        registry: The mapping that contains registered initializers.
+
+    Returns: Validated instance dictionary.
+
+    Raises: The same as :func:`make_instance`.
+    """
+
+    return {
+        name: make_instance(conf, registry=registry)
+        for name, conf in service_map.items()
+    }
 
 
 # Configuration file processing
