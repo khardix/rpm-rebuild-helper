@@ -44,6 +44,13 @@ def validator():
     return cerberus.Validator(schema=phase.SCHEMA)
 
 
+@pytest.fixture
+def service_map():
+    """Mapping of existing services"""
+
+    return {"cbs": (), "jenkins": (), "koji": ()}
+
+
 @pytest.mark.parametrize("config", VALID_CONFIGURATIONS)
 def test_valid_file_validates(validator, config):
     """A valid configuration file passes validation"""
@@ -73,3 +80,23 @@ def test_validate_raises_on_invalid_file(config):
 
     with pytest.raises(phase.InvalidConfiguration):
         phase.validate(CONFIGURATION_FILE_CONTENTS[config])
+
+
+@pytest.mark.parametrize("config", VALID_CONFIGURATIONS)
+def test_validate_integrity_returns_on_valid_references(config, service_map):
+    """A file with valid references passes through validate_integrity()"""
+
+    phase_map = CONFIGURATION_FILE_CONTENTS[config]
+    validated = phase.validate_integrity(phase_map, service_map)
+    assert validated == phase_map
+
+
+@pytest.mark.parametrize("config", ["valid"])
+def test_validate_integrity_raises_on_invalid_references(config, service_map):
+    """A file with invalid references raises"""
+
+    phase_map = CONFIGURATION_FILE_CONTENTS[config]
+    del service_map["koji"]
+
+    with pytest.raises(phase.InvalidConfiguration):
+        phase.validate_integrity(phase_map, service_map)
