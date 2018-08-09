@@ -2,6 +2,7 @@
 
 from io import BytesIO
 from os import path
+from textwrap import dedent
 
 import pytest
 from pyfakefs.fake_pathlib import FakePathlibModule
@@ -78,3 +79,40 @@ def mock_config_file_stubs(mock_xdg_config_home, fs):
 
     for pth, content in file_contents.items():
         fs.CreateFile(pth, contents=content, encoding="utf-8")
+
+
+@pytest.fixture
+def mock_config_files(mock_xdg_config_home, fs, monkeypatch):
+    """Complete valid package configuration"""
+
+    # Disable pkg_resources
+    monkeypatch.setattr(conf_loading, "resource_listdir", lambda *__: [])
+    monkeypatch.setattr(conf_loading, "resource_stream", lambda *__: BytesIO())
+
+    # Create fake files -- single valid file of each kind
+    runtime_path = path.join(mock_xdg_config_home, RESOURCE_ID, "config.toml")
+    service_path = path.join(mock_xdg_config_home, RESOURCE_ID, "test.service.toml")
+    phase_path = path.join(mock_xdg_config_home, RESOURCE_ID, "test.phase.toml")
+    content_map = {
+        runtime_path: 'collection_list_url = "https://example.com/scl-{el}"',
+        service_path: dedent(
+            """\
+                [test]
+                type = "dnf"
+                repo_configs = []
+                """
+        ),
+        phase_path: dedent(
+            """\
+                [test.repo]
+                service = "test"
+                tags = []
+                """
+        ),
+    }
+
+    for pth, content in content_map.items():
+        fs.create_file(pth, contents=content, encoding="utf-8")
+
+    # Map temporary directory for DNF
+    fs.add_real_directory("/var/tmp", read_only=False)
