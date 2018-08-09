@@ -2,22 +2,19 @@
 
 import logging
 from collections import defaultdict
-from contextlib import ExitStack
 from copy import deepcopy
 from functools import partial, wraps
-from itertools import groupby, chain
+from itertools import groupby
 from operator import attrgetter, itemgetter
 from typing import Iterator, Optional, Union
 from typing import Mapping, TextIO, Callable
 
 import attr
 import click
-import toml
 from ruamel import yaml
 from attr.validators import optional, instance_of
 
 from .. import rpm
-from ..util.filesystem import open_resource_files, open_config_files
 
 
 LOG = logging.getLogger(__name__)
@@ -25,38 +22,6 @@ LOG = logging.getLogger(__name__)
 # Add YAML dump capabilities for python types not supported by default
 YAMLDumper = deepcopy(yaml.SafeDumper)
 YAMLDumper.add_representer(defaultdict, lambda r, d: r.represent_dict(d))
-
-
-def load_configuration(
-    glob: str,
-    *,
-    interpret: Callable[[TextIO], Mapping] = toml.load,
-    validate: Callable[[Mapping], Mapping] = lambda m: m,
-) -> Iterator[Mapping]:
-    """Load configuration contents from both bundled and system files.
-
-    Keyword arguments:
-        glob: File name (NOT path) glob matching the requested files.
-        interpret: Converter from text stream to Python objects.
-            Defaults to toml.load().
-        validate: Validation and normalization of single configuration file.
-            Should raise an exception on validation failure.
-            Defaults to pass-through lambda -- no validation or normalization.
-
-    Yields:
-        Interpreted contents of configuration files.
-        The order is from most (user) specific to most generic (bundled) ones.
-    """
-
-    with ExitStack() as opened:
-        system = map(opened.enter_context, open_config_files(glob))
-        bundle = map(opened.enter_context, open_resource_files("conf.d", glob))
-        streams = chain(system, bundle)
-
-        interpreted = map(interpret, streams)
-        validated = map(validate, interpreted)
-
-        yield from validated
 
 
 #

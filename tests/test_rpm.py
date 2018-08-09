@@ -11,19 +11,17 @@ from rpmrh import rpm
 
 METADATA_PARAMETERS = [
     # Only required fields
-    MappingProxyType({
-        'name': 'rpmrh',
-        'version': '0.1.0',
-        'release': '1.fc26',
-    }),
+    MappingProxyType({"name": "rpmrh", "version": "0.1.0", "release": "1.fc26"}),
     # All possible fields
-    MappingProxyType({
-        'name': 'rpmrh',
-        'version': '0.1.0',
-        'release': '1.fc26',
-        'epoch': '1',
-        'arch': 'x86_64',
-    }),
+    MappingProxyType(
+        {
+            "name": "rpmrh",
+            "version": "0.1.0",
+            "release": "1.fc26",
+            "epoch": "1",
+            "arch": "x86_64",
+        }
+    ),
 ]
 
 
@@ -34,10 +32,13 @@ def metadata(request) -> rpm.Metadata:
     return rpm.Metadata(**request.param)
 
 
-@pytest.fixture(params=METADATA_PARAMETERS + [
-    # epoch in weird place
-    '1:rpmrh-0.1.0-1.fc26.x86_64',
-])
+@pytest.fixture(
+    params=METADATA_PARAMETERS
+    + [
+        # epoch in weird place
+        "1:rpmrh-0.1.0-1.fc26.x86_64"
+    ]
+)
 def nevra(request) -> str:
     """Provide NEVRA string for metadata creation"""
 
@@ -47,44 +48,41 @@ def nevra(request) -> str:
     format_map = request.param.copy()
 
     # Pre-formatting
-    if 'epoch' in format_map:
-        format_map['epoch'] = '{epoch}:'.format_map(format_map)
+    if "epoch" in format_map:
+        format_map["epoch"] = "{epoch}:".format_map(format_map)
     else:
-        format_map['epoch'] = ''
+        format_map["epoch"] = ""
 
-    if 'arch' in format_map:
-        format_map['arch'] = '.{arch}'.format_map(format_map)
+    if "arch" in format_map:
+        format_map["arch"] = ".{arch}".format_map(format_map)
     else:
-        format_map['arch'] = ''
+        format_map["arch"] = ""
 
-    return '{name}-{epoch}{version}-{release}{arch}'.format_map(format_map)
+    return "{name}-{epoch}{version}-{release}{arch}".format_map(format_map)
 
 
 @pytest.fixture
 def local_pkg(metadata, minimal_srpm_path) -> rpm.LocalPackage:
     """Provide LocalPackage object"""
 
-    return rpm.LocalPackage(
-        **attr.asdict(metadata),
-        path=minimal_srpm_path,
-    )
+    return rpm.LocalPackage(**attr.asdict(metadata), path=minimal_srpm_path)
 
 
 def test_construction_from_file(minimal_srpm_path):
     """Metadata can be read from open file."""
 
-    with minimal_srpm_path.open(mode='rb') as istream:
+    with minimal_srpm_path.open(mode="rb") as istream:
         metadata = rpm.Metadata.from_file(istream)
 
-    assert metadata.name == 'test'
+    assert metadata.name == "test"
     assert metadata.epoch == 0
-    assert metadata.arch == 'src'
+    assert metadata.arch == "src"
 
 
 def test_nvr_format(metadata):
     """Ensure NVR is formatted as expected"""
 
-    nvr_format = '{name}-{version}-{release}'
+    nvr_format = "{name}-{version}-{release}"
 
     assert metadata.nvr == nvr_format.format_map(attr.asdict(metadata))
 
@@ -92,7 +90,7 @@ def test_nvr_format(metadata):
 def test_nevra_format(metadata):
     """Ensure that the NEVRA is formatted as expected"""
 
-    nevra_format = '{name}-{epoch}:{version}-{release}.{arch}'
+    nevra_format = "{name}-{epoch}:{version}-{release}.{arch}"
 
     assert metadata.nevra == nevra_format.format_map(attr.asdict(metadata))
 
@@ -101,9 +99,9 @@ def test_canonical_name_format(metadata):
     """Ensure that the canonical name is constructed properly"""
 
     if metadata.epoch:
-        canonical_format = '{name}-{epoch}:{version}-{release}.{arch}.rpm'
+        canonical_format = "{name}-{epoch}:{version}-{release}.{arch}.rpm"
     else:
-        canonical_format = '{name}-{version}-{release}.{arch}.rpm'
+        canonical_format = "{name}-{version}-{release}.{arch}.rpm"
 
     assert metadata.canonical_file_name == canonical_format.format_map(
         attr.asdict(metadata)
@@ -113,7 +111,7 @@ def test_canonical_name_format(metadata):
 def test_compare_as_expected(metadata):
     """Ensure that the comparison operators works as expected"""
 
-    newer_version = attr.evolve(metadata, epoch=metadata.epoch+1)
+    newer_version = attr.evolve(metadata, epoch=metadata.epoch + 1)
 
     assert not metadata == newer_version
     assert metadata != newer_version
@@ -143,9 +141,9 @@ def test_construction_from_path(minimal_srpm_path):
 
     metadata = rpm.LocalPackage.from_path(minimal_srpm_path)
 
-    assert metadata.name == 'test'
+    assert metadata.name == "test"
     assert metadata.epoch == 0
-    assert metadata.arch == 'src'
+    assert metadata.arch == "src"
     assert metadata.path == minimal_srpm_path
 
 
@@ -153,28 +151,31 @@ def test_construction_from_nevra(nevra):
     """Metadata can be obtained by parsing a NEVRA string."""
 
     metadata = rpm.Metadata.from_nevra(nevra)
-    print(nevra, '->', repr(metadata), file=sys.stderr)
+    print(nevra, "->", repr(metadata), file=sys.stderr)
 
-    assert metadata.name == 'rpmrh'
+    assert metadata.name == "rpmrh"
     assert metadata.epoch in {0, 1}
-    assert metadata.version == '0.1.0'
-    assert metadata.release == '1.fc26'
-    assert metadata.arch in {'src', 'x86_64'}
+    assert metadata.version == "0.1.0"
+    assert metadata.release == "1.fc26"
+    assert metadata.arch in {"src", "x86_64"}
 
 
 def test_construction_from_file_name(nevra):
     """Metadata can be obtained from base file name."""
 
-    filename = '.'.join((nevra, 'rpm'))
+    filename = ".".join((nevra, "rpm"))
 
     assert rpm.Metadata.from_nevra(nevra) == rpm.Metadata.from_nevra(filename)
 
 
-@pytest.mark.parametrize('original_nvr,result_nvr', [
-    ('abcde-1.0-1.el7_4', 'abcde-1.0-1.el7'),
-    ('binutils-3.6-4.el8+4', 'binutils-3.6-4.el8'),
-    ('abcde-1.0-1.fc27', 'abcde-1.0-1.fc27'),
-])
+@pytest.mark.parametrize(
+    "original_nvr,result_nvr",
+    [
+        ("abcde-1.0-1.el7_4", "abcde-1.0-1.el7"),
+        ("binutils-3.6-4.el8+4", "binutils-3.6-4.el8"),
+        ("abcde-1.0-1.fc27", "abcde-1.0-1.fc27"),
+    ],
+)
 def test_shoten_dist_tag_works(original_nvr, result_nvr):
     """Ensure that the dist tag is simplified correctly."""
 
