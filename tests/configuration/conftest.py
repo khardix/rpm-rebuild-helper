@@ -1,9 +1,13 @@
 """Configuration test fixtures"""
 
 from io import BytesIO
+from os import path
 
 import pytest
+from pyfakefs.fake_pathlib import FakePathlibModule
+from xdg.BaseDirectory import xdg_config_home
 
+from rpmrh import RESOURCE_ID
 from rpmrh.configuration import _loading as conf_loading
 
 
@@ -17,9 +21,9 @@ def mock_package_resources(monkeypatch):
     }
 
     file_contents = {
-        "conf.d/a.service.toml": BytesIO("OK".encode("utf-8")),
+        "conf.d/a.service.toml": BytesIO("SERVICE".encode("utf-8")),
         "conf.d/b.service": BytesIO("FAIL".encode("utf-8")),
-        "conf.d/c.service.toml": BytesIO("OK".encode("utf-8")),
+        "conf.d/c.service.toml": BytesIO("SERVICE".encode("utf-8")),
         "other/fail.service.toml": BytesIO("FAIL".encode("utf-8")),
     }
     # Set names of the IO streams
@@ -34,15 +38,43 @@ def mock_package_resources(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def monkeypatch_pathlib_import(monkeypatch, fs):
+    """Patch pathlib.Path imports"""
+
+    fake_pathlib = FakePathlibModule(fs)
+
+    class PathMock:
+        def __init__(self, *args, **kwargs):
+            self.__delegate = fake_pathlib.Path(*args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self.__delegate, name)
+
+    monkeypatch.setattr(conf_loading, "Path", PathMock)
+
+
 @pytest.fixture
-def mock_config_files(fs):
+def mock_xdg_config_home(fs):
+    """Mocked XDG configuration environment.
+
+    Yields: Value of :env:`XDG_CONFIG_HOME`.
+    """
+
+    fs.create_dir(xdg_config_home)
+    yield xdg_config_home
+
+
+@pytest.fixture
+def mock_config_file_stubs(mock_xdg_config_home, fs):
     """Mock file system with XDG configuration files."""
 
     file_contents = {
-        "~/.config/rpmrh/user.service.toml": "OK",
-        "~/.config/rpmrh/fail.service": "FAIL",
-        "/etc/xdg/rpmrh/system.service.toml": "OK",
+        path.join(mock_xdg_config_home, RESOURCE_ID, "user.service.toml"): "SERVICE",
+        path.join(mock_xdg_config_home, RESOURCE_ID, "fail.service"): "FAIL",
+        path.join(mock_xdg_config_home, RESOURCE_ID, "config.toml"): "CONFIG",
+        path.join("/etc/xdg", RESOURCE_ID, "system.service.toml"): "SERVICE",
     }
 
-    for path, content in file_contents.items():
-        fs.CreateFile(path, contents=content, encoding="utf-8")
+    for pth, content in file_contents.items():
+        fs.CreateFile(pth, contents=content, encoding="utf-8")
