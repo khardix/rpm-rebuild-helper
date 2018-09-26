@@ -6,16 +6,16 @@ verify_ssl = true
 "e1839a8" = {path = ".", editable = true}
 
 [requires]
-python_version = "3.6"
+python_version = "3.7"
 
 [dev-packages]
 pytest = "*"
 pyfakefs = "*"
-betamax = "*"
 ipython = "*"
 pytest-mock = "*"
 sphinx = "*"
 sphinx-autobuild = "*"
+betamax = "*"
 
 [scripts]
 test = "python -m pytest -x"

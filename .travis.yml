@@ -7,8 +7,8 @@ language: python
 
 env:
   - BASE_OS='fedora:rawhide' INSTALLER='dnf'
-  - BASE_OS='fedora:27' INSTALLER='dnf'
-  - BASE_OS='fedora:26' INSTALLER='dnf'
+  - BASE_OS='fedora:29' INSTALLER='dnf'
+  - BASE_OS='fedora:28' INSTALLER='dnf'
 
 branches:
   except:
