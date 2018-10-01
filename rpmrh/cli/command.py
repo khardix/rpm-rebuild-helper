@@ -321,7 +321,7 @@ def build(package_stream, fail_file):
                     failed[pkg.scl.collection][target].add(failure)
 
     if not failed:
-        raise StopIteration()
+        return
 
     # Convert the stored exceptions to readable representation
     readable_failures = {
