@@ -6,6 +6,7 @@ from typing import Set, Iterator, Optional, Container, Mapping
 import attr
 import requests
 from attr.validators import instance_of
+from pkg_resources import parse_version
 
 from . import abc
 from .. import rpm
@@ -14,6 +15,35 @@ from ..util import system_import, default_requests_session
 
 dnf = system_import("dnf")
 DNFPackage = system_import("dnf.package", "Package")
+
+
+class _RepoProxy:
+    """Temporary workaround proxy around repo objects"""
+
+    def __init__(self, repository):
+        self.__repo = repository
+
+    def __getattr__(self, name):
+        return getattr(self.__repo, name)
+
+    @property
+    def baseurl(self):
+        """Workaround for rhbz#1649284"""
+
+        return [str(baseurl) for baseurl in self.__repo.baseurl]
+
+
+def adjust_base(base: dnf.Base) -> dnf.Base:
+    """Applies necessary workarounds for DNF issues."""
+
+    dnf_version = parse_version(dnf.__version__)
+
+    # rhbz#1649284
+    if parse_version("2.7.5") < dnf_version:
+        for name, repo in base.repos.items():
+            base.repos[name] = _RepoProxy(repo)
+
+    return base
 
 
 def convert_metadata(package: DNFPackage) -> rpm.Metadata:
@@ -43,7 +73,7 @@ class RepoGroup(abc.Repository):
     """Group of managed DNF repositories."""
 
     #: dnf.Base object managing the group
-    base = attr.ib(validator=instance_of(dnf.Base))
+    base = attr.ib(validator=instance_of(dnf.Base), converter=adjust_base)
 
     @classmethod
     def configured(cls, repo_configs: Container[Mapping], **kwargs):
