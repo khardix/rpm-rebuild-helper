@@ -5,6 +5,10 @@ import pytest
 
 from rpmrh import service, rpm
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:betamax_parametrized:DeprecationWarning"
+)
+
 # FIXME Separation to ALL_PKGS and INSTALL_ONLY no longer makes sense
 
 #: Job containing install-all-pkgs artifact
@@ -76,10 +80,10 @@ ALL_BUILDS = SINGLE_SECTION, MULTIPLE_SECTION
 
 
 @pytest.fixture
-def server(mocker, betamax_parametrized_session):
+def server(mocker, betamax_session):
     url = "https://ci.centos.org/"
     handle = mocker.Mock(spec=jenkins.Jenkins(url))
-    session = betamax_parametrized_session
+    session = betamax_session
 
     def get_job_info(name):
         try:
@@ -98,13 +102,10 @@ def test_server_creation(server):
     assert server
 
 
-def test_server_creation_from_configuration(server, betamax_parametrized_session):
+def test_server_creation_from_configuration(server, betamax_session):
     """Server instance can be created from text configuration"""
 
-    configuration = {
-        "url": "https://ci.centos.org/",
-        "session": betamax_parametrized_session,
-    }
+    configuration = {"url": "https://ci.centos.org/", "session": betamax_session}
 
     configured = service.jenkins.Server.configure(**configuration)
 

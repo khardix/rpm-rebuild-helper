@@ -1,10 +1,17 @@
 """Common validation routines for configuration files"""
 
+import warnings
 from typing import Mapping, Optional
 
-import cerberus
-
 from ..exception import UserError
+
+with warnings.catch_warnings():
+    warnings.filterwarnings(  # Already fixed upstream
+        "ignore",
+        message="Using or importing the ABCs from 'collections'",
+        category=DeprecationWarning,
+    )
+    import cerberus
 
 
 class InvalidConfiguration(UserError):

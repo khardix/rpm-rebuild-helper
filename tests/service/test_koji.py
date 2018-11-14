@@ -17,6 +17,10 @@ from rpmrh import rpm
 from rpmrh.service import koji
 from rpmrh.service.abc import BuildFailure
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:betamax_parametrized:DeprecationWarning"
+)
+
 
 class MockBuilder:
     """Mock implementations of koji functionality."""
@@ -207,7 +211,7 @@ def built_package():
 
 
 @pytest.fixture
-def service(configuration_profile, betamax_parametrized_session):
+def service(configuration_profile, betamax_session):
     """Initialized koji.Service"""
 
     parser = ConfigParser()
@@ -215,7 +219,7 @@ def service(configuration_profile, betamax_parametrized_session):
 
     service = koji.Service(configuration=parser["cbs"], tag_prefixes={"sclo"})
 
-    service.session.rsession = betamax_parametrized_session
+    service.session.rsession = betamax_session
 
     return service
 

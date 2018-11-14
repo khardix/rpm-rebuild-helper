@@ -71,14 +71,14 @@ class Metadata:
         validator=optional(instance_of(int)),
         default=0,
         # special case for None: treat that as 0
-        convert=lambda val: 0 if val is None else int(val),
+        converter=lambda val: 0 if val is None else int(val),
     )
 
     #: RPM architecture
     arch = attr.ib(
         validator=optional(instance_of(str)),
         default="src",
-        convert=lambda val: "src" if val is None else str(val),
+        converter=lambda val: "src" if val is None else str(val),
     )
 
     # Alternative constructors
@@ -221,7 +221,7 @@ class LocalPackage(Metadata):
     """Metadata of existing RPM package on local file system."""
 
     #: Resolved path to the RPM package
-    path = attr.ib(convert=_resolve_path)
+    path = attr.ib(converter=_resolve_path)
 
     @path.default
     def pkg_in_cwd(self):

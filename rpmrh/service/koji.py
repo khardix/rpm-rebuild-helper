@@ -33,7 +33,7 @@ class BuiltPackage(rpm.Metadata):
     """
 
     #: Unique identification of a build within the service
-    id = attr.ib(validator=instance_of(int), convert=int, default=None)
+    id = attr.ib(validator=instance_of(int), converter=int, default=None)
 
     @classmethod
     def from_mapping(cls, raw_data: Mapping) -> "BuiltPackage":
@@ -95,12 +95,12 @@ class Service(abc.Repository, abc.Builder):
 
     #: Tag prefixes associated with this Koji instance
     tag_prefixes = attr.ib(
-        validator=instance_of(Set), convert=set, default=attr.Factory(set)
+        validator=instance_of(Set), converter=set, default=attr.Factory(set)
     )
 
     #: Target prefixes associated with this koji instance
     target_prefixes = attr.ib(
-        validator=instance_of(Set), convert=set, default=attr.Factory(set)
+        validator=instance_of(Set), converter=set, default=attr.Factory(set)
     )
 
     #: Owner to use when adding packages to tag
