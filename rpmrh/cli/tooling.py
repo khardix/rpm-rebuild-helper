@@ -66,7 +66,7 @@ class PackageStream:
 
     #: Internal storage for the packages
     _container = attr.ib(
-        default=frozenset(), validator=instance_of(frozenset), convert=frozenset
+        default=frozenset(), validator=instance_of(frozenset), converter=frozenset
     )
 
     def __iter__(self):
