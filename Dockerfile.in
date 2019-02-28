@@ -1,13 +1,10 @@
 FROM @BASE_OS@
 
-ARG installer=dnf
-RUN ${installer} -y install \
-        which git rpm-build \
-        python3{,-devel,-pip,-rpm,-koji,-dnf,-createrepo_c} \
-    && (if [ -f /usr/bin/pip2 ]; then rpm --erase --nodeps python2-pip; fi)  # Pipenv system install workaround
-RUN python3 -m pip install pipenv
+    # Createrepo_c
+ENV SYSTEM_DEPS="git rpm-build python3-devel python3-pip python3-rpm python3-koji python3-dnf python3-createrepo_c"
 
 WORKDIR /code
 COPY . .
-RUN pipenv install --three --system --deploy --dev
+RUN dnf --assumeyes install $BUILD_DEPS $SYSTEM_DEPS \
+    && python3 -m pip install --user --editable .[dev]
 CMD ["/usr/bin/python3", "setup.py", "test"]
