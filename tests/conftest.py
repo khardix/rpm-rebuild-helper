@@ -11,7 +11,9 @@ from textwrap import dedent
 import betamax
 import pytest
 
-import createrepo_c as crc
+from rpmrh.util import system_import
+
+crc = system_import("createrepo_c")
 
 
 # Betamax configuration
