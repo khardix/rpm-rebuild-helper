@@ -1,3 +1,4 @@
+---
 sudo: required
 
 services:
@@ -15,7 +16,7 @@ branches:
     - /^experimental/
 
 before_script:
-  - sed "s|@BASE_OS@|${BASE_OS}|" Dockerfile.in >Dockerfile
-  - docker build -t "rpmrh/$(basename $BASE_OS)" --build-arg installer="$INSTALLER" .
+  - sed "s|@BASE_OS@|${BASE_OS}|" ci/Dockerfile.in >ci/Dockerfile
+  - docker build -t "rpmrh/$(basename $BASE_OS)" -f ci/Dockerfile "$PWD"
 
 script: docker run --rm -t "rpmrh/$(basename $BASE_OS)"
