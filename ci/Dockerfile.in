@@ -1,0 +1,13 @@
+# Template Dockerfile for running the test suite in distribution environment
+
+FROM @BASE_OS@
+
+ENV SYSTEM_DEPS="git rpm-build python3-devel python3-pip python3-rpm python3-koji python3-dnf python3-createrepo_c"
+RUN dnf --assumeyes install $SYSTEM_DEPS \
+    && python3 -m pip install --user --upgrade pip
+
+WORKDIR /code
+COPY . .
+RUN python3 -m pip install --no-warn-script-location --user --editable .[dev]
+
+CMD ["/usr/bin/python3", "setup.py", "test"]
