@@ -1,8 +1,3 @@
-# The lock file generation is confused by PyPI placeholders
-# for system-level packages (i.e. rpm or dnf python APIs).
-# In that case, no lock is better than a wrong one.
-requirements.lock
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

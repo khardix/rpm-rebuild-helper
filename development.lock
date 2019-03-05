@@ -1,0 +1,20 @@
+# Generated with dmenv 0.11.1, python 3.7.2, on Linux
+argh==0.26.2
+betamax==0.8.1
+click-log==0.3.2
+livereload==2.6.0
+multi-key-dict==2.0.3
+pathtools==0.1.2
+pip==19.0.3
+port-for==0.3.1
+pyfakefs==3.5.7
+pytest-mock==1.10.1
+python-jenkins==1.4.0
+PyTrie==0.3.1
+pyxdg==0.26
+requests-file==1.4.3
+setuptools==40.4.3
+sortedcontainers==2.1.0
+sphinx-autobuild==0.7.1
+tornado==6.0.1
+watchdog==0.9.0
