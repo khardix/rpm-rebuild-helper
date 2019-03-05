@@ -78,7 +78,7 @@ def mock_config_file_stubs(mock_xdg_config_home, fs):
     }
 
     for pth, content in file_contents.items():
-        fs.CreateFile(pth, contents=content, encoding="utf-8")
+        fs.create_file(pth, contents=content, encoding="utf-8")
 
 
 @pytest.fixture

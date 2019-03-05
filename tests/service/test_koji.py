@@ -1,5 +1,6 @@
 """Test communication with a koji build service"""
 
+import os
 from configparser import ConfigParser
 from datetime import datetime, timezone
 from itertools import groupby, chain
@@ -194,11 +195,11 @@ def configuration_file(fs, configuration_profile):
 
     conf_file_name = "/etc/koji.conf.d/cbs-koji.conf"
 
-    fs.CreateFile(conf_file_name, contents=configuration_profile, encoding="utf-8")
+    fs.create_file(conf_file_name, contents=configuration_profile, encoding="utf-8")
 
     yield Path(conf_file_name)
 
-    fs.RemoveFile(conf_file_name)
+    os.remove(conf_file_name)
 
 
 @pytest.fixture
