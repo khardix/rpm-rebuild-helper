@@ -262,7 +262,7 @@ class Service(abc.Repository, abc.Builder):
             for chunk in response.iter_content(chunk_size=256):
                 ostream.write(chunk)
 
-        return rpm.LocalPackage.from_path(target_file_path)
+        return rpm.LocalPackage(target_file_path)
 
     def tag_build(
         self,
@@ -337,7 +337,7 @@ class Service(abc.Repository, abc.Builder):
         """
 
         remote_dir = "{timestamp:%Y-%m-%dT%H:%M:%S}-{package.nevra}".format(
-            timestamp=datetime.now(timezone.utc), package=source_package
+            timestamp=datetime.now(timezone.utc), package=source_package.metadata
         )
 
         logger.debug(
@@ -464,7 +464,9 @@ class Service(abc.Repository, abc.Builder):
         remote_package = self.__upload_srpm(source_package)
         build_task_id = self.__queue_build(target, remote_package)
         result = self.__watch_task(
-            build_task_id, poll_interval=poll_interval, built_package=source_package
+            build_task_id,
+            poll_interval=poll_interval,
+            built_package=source_package.metadata,
         )
         success = result == koji.TASK_STATES["CLOSED"]
 
@@ -473,10 +475,10 @@ class Service(abc.Repository, abc.Builder):
                 self.session.getTaskResult(build_task_id)  # always raise
             except koji.GenericError as original:  # extract the reason
                 reason = original.args[0].partition(":")[0]  # up to first :
-                raise abc.BuildFailure(source_package, reason) from None
+                raise abc.BuildFailure(source_package.metadata, reason) from None
 
         build_params = {
-            key: getattr(source_package, key)
+            key: getattr(source_package.metadata, key)
             for key in ("name", "version", "release", "epoch")
         }
         built_metadata = self.session.getBuild(build_params, strict=True)

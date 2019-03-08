@@ -1,9 +1,10 @@
 """Test communication with a koji build service"""
-
 import os
 from configparser import ConfigParser
-from datetime import datetime, timezone
-from itertools import groupby, chain
+from datetime import datetime
+from datetime import timezone
+from itertools import chain
+from itertools import groupby
 from operator import attrgetter
 from pathlib import Path
 from textwrap import dedent
@@ -254,7 +255,7 @@ def mutable_repo_service(service, built_package):
 def new_package(minimal_srpm_path):
     """Package not yet built in the service."""
 
-    return rpm.LocalPackage.from_path(minimal_srpm_path)
+    return rpm.LocalPackage(minimal_srpm_path)
 
 
 @pytest.fixture
@@ -266,7 +267,7 @@ def existing_package(new_package):
 
     desired_path.touch()
 
-    yield attr.evolve(new_package, **attr.asdict(desired), path=desired_path)
+    yield rpm.LocalPackage(path=desired_path, metadata=desired)
 
     desired_path.unlink()
 
@@ -410,7 +411,7 @@ def test_service_download(service, tmpdir, built_package):
 
     result = service.download(built_package, Path(str(tmpdir)))
 
-    assert result == built_package
+    assert result.metadata == built_package
 
 
 def test_build_reports_nonexistent_target(build_service, new_package):
@@ -426,7 +427,7 @@ def test_new_package_builds_successfully(build_service, new_package):
     result_package = build_service.build("test", new_package)
 
     assert result_package
-    assert result_package == new_package
+    assert result_package == new_package.metadata
 
 
 def test_existing_package_build_raises(build_service, existing_package):
