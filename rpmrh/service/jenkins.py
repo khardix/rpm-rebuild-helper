@@ -1,6 +1,6 @@
 """Jenkins test runner integration"""
 import logging
-from typing import Set
+from typing import FrozenSet
 from urllib.parse import urljoin
 
 import attr
@@ -69,7 +69,7 @@ class Server:
 
         return cls(handle=jenkins.Jenkins(url), **attributes)
 
-    def tested_packages(self, job_name) -> Set[rpm.Metadata]:
+    def tested_packages(self, job_name) -> FrozenSet[rpm.Metadata]:
         """Provide set of packages successfully tested by the specified job.
 
         Keyword arguments:
