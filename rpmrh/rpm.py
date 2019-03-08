@@ -1,21 +1,24 @@
 """RPM-related classes and procedures."""
-
 import operator
 import re
 from functools import partialmethod
 from pathlib import Path
-from typing import BinaryIO, Callable, Tuple, TypeVar, Union
+from typing import Any
+from typing import BinaryIO
+from typing import Callable
+from typing import cast
+from typing import Tuple
+from typing import Union
 
 import attr
-from attr.validators import instance_of, optional
+from attr.validators import instance_of
 
 from .util import system_import
 
 _rpm = system_import("rpm")
 
-# type aliases for comparison functions
-CompareOperator = Callable[[TypeVar("T"), TypeVar("T")], bool]
-CompareResult = Union[bool, type(NotImplemented)]
+# type aliases and helpers
+CompareOperator = Callable[[Any, Any], bool]
 
 
 # NEVRA-related regular expressions
@@ -51,6 +54,23 @@ def _resolve_path(path: Union[str, Path]) -> Path:
     return Path(path).resolve()
 
 
+# Metadata argument normalization
+_DEFAULT_EPOCH: int = 0
+_DEFAULT_ARCH: str = "src"
+
+
+def _normalize_epoch(epoch: Union[str, bytes, int, None]) -> int:
+    """Normalize epoch value into proper integer."""
+
+    return int(epoch) if epoch is not None else _DEFAULT_EPOCH
+
+
+def _normalize_architecture(architecture: Union[str, None]) -> str:
+    """Normalize architecture value into string."""
+
+    return architecture if architecture is not None else _DEFAULT_ARCH
+
+
 @attr.s(slots=True, cmp=False, frozen=True, hash=True)
 class Metadata:
     """Generic RPM metadata.
@@ -60,25 +80,22 @@ class Metadata:
     """
 
     #: RPM name
-    name = attr.ib(validator=instance_of(str))
+    name: str = attr.ib(validator=instance_of(str))
     #: RPM version
-    version = attr.ib(validator=instance_of(str))
+    version: str = attr.ib(validator=instance_of(str))
     #: RPM release
-    release = attr.ib(validator=instance_of(str))
+    release: str = attr.ib(validator=instance_of(str))
 
     #: Optional RPM epoch
-    epoch = attr.ib(
-        validator=optional(instance_of(int)),
-        default=0,
-        # special case for None: treat that as 0
-        converter=lambda val: 0 if val is None else int(val),
+    epoch: int = attr.ib(
+        validator=instance_of(int), default=_DEFAULT_EPOCH, converter=_normalize_epoch
     )
 
     #: RPM architecture
-    arch = attr.ib(
-        validator=optional(instance_of(str)),
-        default="src",
-        converter=lambda val: "src" if val is None else str(val),
+    arch: str = attr.ib(
+        validator=instance_of(str),
+        default=_DEFAULT_ARCH,
+        converter=_normalize_architecture,
     )
 
     # Alternative constructors
@@ -164,7 +181,7 @@ class Metadata:
         return "{s.name}-{s.epoch}:{s.version}-{s.release}.{s.arch}".format(s=self)
 
     @property
-    def label(self) -> Tuple[int, str, str]:
+    def label(self) -> Tuple[str, str, str]:
         """Label compatible with RPM's C API."""
 
         return (str(self.epoch), self.version, self.release)
@@ -181,9 +198,7 @@ class Metadata:
         return format.format(s=self)
 
     # Comparison methods
-    def _compare(
-        self, other: "Metadata", oper: CompareOperator
-    ) -> CompareResult:  # noqa: E501
+    def _compare(self, other: "Metadata", oper: CompareOperator) -> bool:
         """Generic comparison of two RPM-like objects.
 
         Keyword arguments:
@@ -204,12 +219,12 @@ class Metadata:
         except AttributeError:
             return NotImplemented
 
-    __eq__ = partialmethod(_compare, oper=operator.eq)
-    __ne__ = partialmethod(_compare, oper=operator.ne)
-    __lt__ = partialmethod(_compare, oper=operator.lt)
-    __le__ = partialmethod(_compare, oper=operator.le)
-    __gt__ = partialmethod(_compare, oper=operator.gt)
-    __ge__ = partialmethod(_compare, oper=operator.ge)
+    __eq__ = cast(CompareOperator, partialmethod(_compare, oper=operator.eq))
+    __ne__ = cast(CompareOperator, partialmethod(_compare, oper=operator.ne))
+    __lt__ = cast(CompareOperator, partialmethod(_compare, oper=operator.lt))
+    __le__ = cast(CompareOperator, partialmethod(_compare, oper=operator.le))
+    __gt__ = cast(CompareOperator, partialmethod(_compare, oper=operator.gt))
+    __ge__ = cast(CompareOperator, partialmethod(_compare, oper=operator.ge))
 
     # String representations
     def __str__(self) -> str:
@@ -249,9 +264,10 @@ class LocalPackage(Metadata):
         """
 
         with path.open(mode="rb") as file:
-            metadata = attr.asdict(Metadata.from_file(file))
+            metadata = attr.asdict(Metadata.from_file(cast(BinaryIO, file)))
 
-        return cls(**metadata, path=path)
+        metadata["path"] = path
+        return cls(**metadata)
 
     # Path-like protocol
     def __fspath__(self) -> str:
