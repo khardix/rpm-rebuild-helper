@@ -1,7 +1,10 @@
 """Interface to DNF repositories."""
-
 from pathlib import Path
-from typing import Set, Iterator, Optional, Container, Mapping
+from typing import Container
+from typing import Iterator
+from typing import Mapping
+from typing import Optional
+from typing import Set
 
 import attr
 import requests
@@ -10,8 +13,8 @@ from attr.validators import instance_of
 from .. import abc
 from ... import rpm
 from ...configuration import service
-from ...util import system_import, default_requests_session
-
+from ...util import default_requests_session
+from ...util import system_import
 from ._compat import make_compatible
 
 dnf = system_import("dnf")

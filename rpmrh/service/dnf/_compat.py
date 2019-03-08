@@ -1,6 +1,6 @@
 """Compatibility layer for system DNF"""
-
-from typing import Callable, Optional
+from typing import Callable
+from typing import Optional
 
 from pkg_resources import parse_version
 

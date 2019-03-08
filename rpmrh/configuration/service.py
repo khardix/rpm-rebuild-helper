@@ -1,10 +1,15 @@
 """Registration and configuration of remote services."""
-
 from functools import partial
-from typing import Optional, Type
-from typing import Any, Callable, Dict, Mapping, MutableMapping
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import Mapping
+from typing import MutableMapping
+from typing import Optional
+from typing import Type
 
-from ._validation import validate, InvalidConfiguration  # noqa: F401
+from ._validation import InvalidConfiguration
+from ._validation import validate
 
 
 #: Description of generic service configuration

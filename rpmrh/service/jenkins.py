@@ -1,5 +1,4 @@
 """Jenkins test runner integration"""
-
 import logging
 from typing import Set
 from urllib.parse import urljoin
@@ -9,7 +8,8 @@ import jenkins
 import requests
 from attr.validators import instance_of
 
-from .. import rpm, util
+from .. import rpm
+from .. import util
 from ..configuration import service
 from ..exception import UserError
 

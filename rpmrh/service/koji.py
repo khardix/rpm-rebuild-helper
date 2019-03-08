@@ -1,17 +1,23 @@
 """Interface to a Koji build service."""
-
 import logging
 import os
 import time
-from datetime import datetime, timezone
-from itertools import groupby, starmap
-from operator import attrgetter, itemgetter
+from datetime import datetime
+from datetime import timezone
+from itertools import groupby
+from itertools import starmap
+from operator import attrgetter
+from operator import itemgetter
 from pathlib import Path
-from typing import Iterator, Mapping, Optional, Set
+from typing import Iterator
+from typing import Mapping
+from typing import Optional
+from typing import Set
 
 import attr
 import requests
-from attr.validators import instance_of, optional
+from attr.validators import instance_of
+from attr.validators import optional
 from click import style
 
 from . import abc

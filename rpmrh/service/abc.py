@@ -1,10 +1,12 @@
 """Interface definitions for the service kinds."""
-
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta
+from abc import abstractmethod
 from contextlib import ContextDecorator
 from datetime import datetime
 from pathlib import Path
-from typing import Set, Iterator, Optional
+from typing import Iterator
+from typing import Optional
+from typing import Set
 
 import attr
 import requests
