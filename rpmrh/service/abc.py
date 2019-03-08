@@ -4,9 +4,9 @@ from abc import abstractmethod
 from contextlib import ContextDecorator
 from datetime import datetime
 from pathlib import Path
+from typing import AbstractSet
 from typing import Iterator
 from typing import Optional
-from typing import Set
 
 import attr
 import requests
@@ -27,7 +27,7 @@ class Repository(metaclass=ABCMeta):
     # Required methods and properties
     @property
     @abstractmethod
-    def tag_prefixes(self) -> Set[str]:
+    def tag_prefixes(self) -> AbstractSet[str]:
         """Set of tag prefixes associated with this Repository."""
 
     @abstractmethod
@@ -114,7 +114,7 @@ class Builder(ContextDecorator, metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def target_prefixes(self) -> Set[str]:
+    def target_prefixes(self) -> AbstractSet[str]:
         """Set of target prefixes associated with this Builder."""
 
     @abstractmethod

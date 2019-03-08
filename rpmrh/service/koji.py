@@ -9,10 +9,12 @@ from itertools import starmap
 from operator import attrgetter
 from operator import itemgetter
 from pathlib import Path
+from typing import AbstractSet
+from typing import Any
 from typing import Iterator
 from typing import Mapping
 from typing import Optional
-from typing import Set
+from typing import TYPE_CHECKING
 
 import attr
 import requests
@@ -25,7 +27,10 @@ from .. import rpm
 from ..configuration import service
 from ..util import system_import
 
-koji = system_import("koji")
+if TYPE_CHECKING:
+    import koji
+else:
+    koji = system_import("koji")
 
 logger = logging.getLogger(__name__)
 
@@ -91,26 +96,28 @@ class Service(abc.Repository, abc.Builder):
     """Interaction session with a Koji build service."""
 
     #: Client configuration for this service
-    configuration = attr.ib(validator=instance_of(Mapping))
+    configuration: Mapping[str, Any] = attr.ib(validator=instance_of(Mapping))
 
     #: XMLRPC session for communication with the service
-    session = attr.ib(validator=instance_of(koji.ClientSession))
+    session: koji.ClientSession = attr.ib(validator=instance_of(koji.ClientSession))
 
     #: Information about remote URLs and paths
-    path_info = attr.ib(validator=instance_of(koji.PathInfo))
+    path_info: koji.PathInfo = attr.ib(validator=instance_of(koji.PathInfo))
 
     #: Tag prefixes associated with this Koji instance
-    tag_prefixes = attr.ib(
-        validator=instance_of(Set), converter=set, default=attr.Factory(set)
+    tag_prefixes: AbstractSet = attr.ib(
+        validator=instance_of(AbstractSet), converter=set, default=attr.Factory(set)
     )
 
     #: Target prefixes associated with this koji instance
-    target_prefixes = attr.ib(
-        validator=instance_of(Set), converter=set, default=attr.Factory(set)
+    target_prefixes: AbstractSet = attr.ib(
+        validator=instance_of(AbstractSet), converter=set, default=attr.Factory(set)
     )
 
     #: Owner to use when adding packages to tag
-    default_owner = attr.ib(validator=optional(instance_of(str)), default=None)
+    default_owner: Optional[str] = attr.ib(  # noqa: E704
+        validator=optional(instance_of(str)), default=None
+    )
 
     # Dynamic defaults
 
@@ -232,7 +239,7 @@ class Service(abc.Repository, abc.Builder):
         if isinstance(package, BuiltPackage):
             build = package
         else:
-            build = BuiltPackage.from_metadata(package)
+            build = BuiltPackage.from_metadata(self, package)
 
         rpm_list = self.session.listRPMs(buildID=build.id, arches=build.arch)
         # Get only the package exactly matching the metadata
@@ -382,7 +389,7 @@ class Service(abc.Repository, abc.Builder):
             A numeric identification of final task state (koji.TASK_STATES).
         """
 
-        def name_state(task_info: Mapping) -> Optional[int]:
+        def name_state(task_info: Mapping) -> Optional[str]:
             """Extract the name of the state from the task info, if present."""
 
             state_number = task_info.get("state", None)
@@ -394,7 +401,7 @@ class Service(abc.Repository, abc.Builder):
             if silent:
                 return
 
-            COLORS = {
+            COLORS: Mapping[str, Mapping] = {
                 "FREE": dict(fg="cyan"),
                 "OPEN": dict(fg="yellow"),
                 "CLOSED": dict(fg="green"),
@@ -403,7 +410,7 @@ class Service(abc.Repository, abc.Builder):
                 "FAILED": dict(fg="red", bold=True),
             }
 
-            state_name = name_state(task_info)
+            state_name = name_state(task_info) or "UNKNOWN"
 
             message = "Build task {id} [{nevra}]: {state_name}".format(
                 id=task_info["id"],
@@ -411,7 +418,7 @@ class Service(abc.Repository, abc.Builder):
                 state_name=state_name,
             )
 
-            logger.info(style(message, **COLORS[state_name]))
+            logger.info(style(message, **COLORS.get(state_name, {})))
 
         END_STATE_SET = {"CLOSED", "CANCELED", "FAILED"}
 
@@ -431,12 +438,16 @@ class Service(abc.Repository, abc.Builder):
         return task_info["state"]
 
     def build(
-        self, target: str, source_package: rpm.LocalPackage, *, poll_interval: int = 5
+        self,
+        target_name: str,
+        source_package: rpm.LocalPackage,
+        *,
+        poll_interval: int = 5,
     ) -> BuiltPackage:
         """Build package using the service.
 
         Keyword arguments:
-            target: Name of the target to build into.
+            target_name: Name of the target to build into.
             source_package: The package to build.
             poll_interval: Interval (in seconds) of querying the task state
                 when watching.
@@ -449,7 +460,7 @@ class Service(abc.Repository, abc.Builder):
             BuildFailure: Build failure explanation.
         """
 
-        target = self.__query_target(target)  # raises on unknown target
+        target = self.__query_target(target_name)  # raises on unknown target
         remote_package = self.__upload_srpm(source_package)
         build_task_id = self.__queue_build(target, remote_package)
         result = self.__watch_task(
@@ -457,17 +468,16 @@ class Service(abc.Repository, abc.Builder):
         )
         success = result == koji.TASK_STATES["CLOSED"]
 
-        if success:
-            build_params = {
-                key: getattr(source_package, key)
-                for key in ("name", "version", "release", "epoch")
-            }
-            built_metadata = self.session.getBuild(build_params, strict=True)
-            return BuiltPackage.from_mapping(built_metadata)
-
-        else:
+        if not success:
             try:
                 self.session.getTaskResult(build_task_id)  # always raise
             except koji.GenericError as original:  # extract the reason
                 reason = original.args[0].partition(":")[0]  # up to first :
                 raise abc.BuildFailure(source_package, reason) from None
+
+        build_params = {
+            key: getattr(source_package, key)
+            for key in ("name", "version", "release", "epoch")
+        }
+        built_metadata = self.session.getBuild(build_params, strict=True)
+        return BuiltPackage.from_mapping(built_metadata)
