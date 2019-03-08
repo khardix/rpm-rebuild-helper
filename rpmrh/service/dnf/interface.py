@@ -1,10 +1,11 @@
 """Interface to DNF repositories."""
 from pathlib import Path
-from typing import Container
+from typing import Iterable
 from typing import Iterator
 from typing import Mapping
 from typing import Optional
 from typing import Set
+from typing import TYPE_CHECKING
 
 import attr
 import requests
@@ -17,8 +18,12 @@ from ...util import default_requests_session
 from ...util import system_import
 from ._compat import make_compatible
 
-dnf = system_import("dnf")
-DNFPackage = system_import("dnf.package", "Package")
+if TYPE_CHECKING:
+    import dnf
+    from dnf.package import Package as DNFPackage
+else:
+    dnf = system_import("dnf")
+    DNFPackage = system_import("dnf.package", "Package")
 
 
 def convert_metadata(package: DNFPackage) -> rpm.Metadata:
@@ -51,7 +56,7 @@ class RepoGroup(abc.Repository):
     base = attr.ib(validator=instance_of(dnf.Base), converter=make_compatible)
 
     @classmethod
-    def configured(cls, repo_configs: Container[Mapping], **kwargs):
+    def configured(cls, repo_configs: Iterable[Mapping]):
         """Create a new instance from repository configurations.
 
         Keyword arguments:
@@ -64,6 +69,8 @@ class RepoGroup(abc.Repository):
         base = dnf.Base()
 
         for config in repo_configs:
+            # Make independent shallow copy for our modification
+            config = dict(config)
             # Convert arguments to proper API
             arguments = {
                 "repoid": config.pop("name"),
@@ -73,7 +80,7 @@ class RepoGroup(abc.Repository):
 
             base.repos.add_new_repo(**arguments, **config)
 
-        return cls(base, **kwargs)
+        return cls(base)
 
     @property
     def tag_prefixes(self) -> Set[str]:

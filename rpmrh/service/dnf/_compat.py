@@ -1,12 +1,16 @@
 """Compatibility layer for system DNF"""
 from typing import Callable
 from typing import Optional
+from typing import TYPE_CHECKING
 
 from pkg_resources import parse_version
 
 from ...util import system_import
 
-dnf = system_import("dnf")
+if TYPE_CHECKING:
+    import dnf
+else:
+    dnf = system_import("dnf")
 
 # Types
 BasePatch = Callable[[dnf.Base], dnf.Base]
