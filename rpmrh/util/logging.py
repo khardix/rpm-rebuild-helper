@@ -44,7 +44,6 @@ def quiet_option(
         names = "--quiet", "-q"
 
     def decorator(f):
-
         def set_level(_ctx, _param, quiet):
             """Set logger output level."""
 

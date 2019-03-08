@@ -310,9 +310,7 @@ class Service(abc.Repository, abc.Builder):
         else:
             message = (
                 'Build target "{target_name}" ' "is not handled by this service."
-            ).format(
-                target_name=target_name
-            )
+            ).format(target_name=target_name)
             raise ValueError(message)
 
     def __upload_srpm(self, source_package: rpm.LocalPackage) -> str:
