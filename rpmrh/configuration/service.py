@@ -8,7 +8,7 @@ from typing import MutableMapping
 from typing import Optional
 from typing import Type
 
-from ._validation import InvalidConfiguration
+from ._validation import InvalidConfiguration  # noqa: F401
 from ._validation import validate
 
 
@@ -26,7 +26,7 @@ SCHEMA = {
 }
 
 #: Registered service types
-KNOWN_TYPES = {}
+KNOWN_TYPES: MutableMapping[str, Callable] = {}
 
 
 class DuplicateError(KeyError):
@@ -73,9 +73,7 @@ def register(
     return decorator
 
 
-def make_instance(
-    configuration_map: MutableMapping, *, registry: MutableMapping = KNOWN_TYPES
-):
+def make_instance(configuration_map: Mapping, *, registry: Mapping = KNOWN_TYPES):
     """Turn configuration into proper instance.
 
     Keyword arguments:
@@ -90,6 +88,7 @@ def make_instance(
         KeyError: Requested type is missing from registry.
     """
 
+    configuration_map = dict(configuration_map)
     type_name = configuration_map.pop("type")
     return registry[type_name](**configuration_map)
 
