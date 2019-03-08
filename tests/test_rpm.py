@@ -1,8 +1,7 @@
 """Test the rpmrh.rpm module."""
-
+import sys
 from types import MappingProxyType
 
-import sys
 import attr
 import pytest
 
@@ -65,18 +64,7 @@ def nevra(request) -> str:
 def local_pkg(metadata, minimal_srpm_path) -> rpm.LocalPackage:
     """Provide LocalPackage object"""
 
-    return rpm.LocalPackage(**attr.asdict(metadata), path=minimal_srpm_path)
-
-
-def test_construction_from_file(minimal_srpm_path):
-    """Metadata can be read from open file."""
-
-    with minimal_srpm_path.open(mode="rb") as istream:
-        metadata = rpm.Metadata.from_file(istream)
-
-    assert metadata.name == "test"
-    assert metadata.epoch == 0
-    assert metadata.arch == "src"
+    return rpm.LocalPackage(path=minimal_srpm_path, metadata=metadata)
 
 
 def test_nvr_format(metadata):
@@ -136,17 +124,6 @@ def test_metadata_are_hashable(metadata):
     assert len({metadata, metadata}) == 1
 
 
-def test_construction_from_path(minimal_srpm_path):
-    """Metadata can be read for a file path."""
-
-    metadata = rpm.LocalPackage.from_path(minimal_srpm_path)
-
-    assert metadata.name == "test"
-    assert metadata.epoch == 0
-    assert metadata.arch == "src"
-    assert metadata.path == minimal_srpm_path
-
-
 def test_construction_from_nevra(nevra):
     """Metadata can be obtained by parsing a NEVRA string."""
 
@@ -166,6 +143,17 @@ def test_construction_from_file_name(nevra):
     filename = ".".join((nevra, "rpm"))
 
     assert rpm.Metadata.from_nevra(nevra) == rpm.Metadata.from_nevra(filename)
+
+
+def test_construction_from_path(minimal_srpm_path):
+    """Metadata can be read for a file path."""
+
+    package = rpm.LocalPackage(minimal_srpm_path)
+
+    assert package.metadata.name == "test"
+    assert package.metadata.epoch == 0
+    assert package.metadata.arch == "src"
+    assert package.path == minimal_srpm_path
 
 
 @pytest.mark.parametrize(

@@ -146,4 +146,4 @@ class RepoGroup(abc.Repository):
             for chunk in response.iter_content(chunk_size=256):
                 ostream.write(chunk)
 
-        return rpm.LocalPackage.from_path(target_path)
+        return rpm.LocalPackage(target_path)

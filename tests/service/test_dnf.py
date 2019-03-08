@@ -1,5 +1,4 @@
 """Test the DNF interface"""
-
 from pathlib import Path
 
 import dnf as system_dnf
@@ -62,17 +61,17 @@ def test_repo_builds_are_reported(configured_group, minimal_srpm_path):
     build, = builds
 
     assert isinstance(build, rpm.Metadata)
-    assert build == rpm.LocalPackage.from_path(minimal_srpm_path)
+    assert build == rpm.LocalPackage(minimal_srpm_path).metadata
 
 
 def test_packages_are_downloaded(configured_group, minimal_srpm_path, tmpdir_factory):
     """Packages can be downloaded from the repo"""
 
     target_dir = Path(str(tmpdir_factory.mktemp("dnf-download")))
-    request = rpm.LocalPackage.from_path(minimal_srpm_path)
+    request = rpm.LocalPackage(minimal_srpm_path)
 
     result = configured_group.download(request, target_dir)
 
     assert result
     assert result.path.relative_to(target_dir)
-    assert result == request
+    assert result.metadata == request.metadata

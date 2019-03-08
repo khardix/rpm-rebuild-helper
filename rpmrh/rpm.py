@@ -4,9 +4,9 @@ import re
 from functools import partialmethod
 from pathlib import Path
 from typing import Any
-from typing import BinaryIO
 from typing import Callable
 from typing import cast
+from typing import ClassVar
 from typing import Tuple
 from typing import Union
 
@@ -21,20 +21,6 @@ _rpm = system_import("rpm")
 CompareOperator = Callable[[Any, Any], bool]
 
 
-# NEVRA-related regular expressions
-EPOCH_RE = re.compile(r"(\d+):")
-NVRA_re = re.compile(
-    r"""
-    ^
-    (?P<name>\S+)-          # package name
-    (?P<version>[\w.]+)-    # package version
-    (?P<release>\w+(?:\.[\w+]+)+?)  # package release, with required dist tag
-    (?:\.(?P<arch>\w+))?    # optional package architecture
-    (?:\.rpm)??             # optional rpm extension
-    $
-""",
-    flags=re.VERBOSE,
-)
 # .el7_4 format
 LONG_DIST_RE = re.compile(
     r"""
@@ -47,14 +33,7 @@ LONG_DIST_RE = re.compile(
 )
 
 
-# Helper for ensuring resolved paths
-def _resolve_path(path: Union[str, Path]) -> Path:
-    """Resolve the path argument"""
-
-    return Path(path).resolve()
-
-
-# Metadata argument normalization
+# Argument normalization
 _DEFAULT_EPOCH: int = 0
 _DEFAULT_ARCH: str = "src"
 
@@ -71,6 +50,12 @@ def _normalize_architecture(architecture: Union[str, None]) -> str:
     return architecture if architecture is not None else _DEFAULT_ARCH
 
 
+def _normalize_path(path: Union[str, Path]) -> Path:
+    """Normalize path arguments into canonical absolute paths"""
+
+    return Path(path).resolve()
+
+
 @attr.s(slots=True, cmp=False, frozen=True, hash=True)
 class Metadata:
     """Generic RPM metadata.
@@ -78,6 +63,22 @@ class Metadata:
     This class should act as a basis for all the RPM-like objects,
     providing common comparison and other "dunder" methods.
     """
+
+    #: Regular expression for extracting epoch from an NEVRA string
+    _EPOCH_RE: ClassVar = re.compile(r"(\d+):")
+    #: Regular expression for splitting up NVR string
+    _NVRA_RE: ClassVar = re.compile(
+        r"""
+        ^
+        (?P<name>\S+)-          # package name
+        (?P<version>[\w.]+)-    # package version
+        (?P<release>\w+(?:\.[\w+]+)+?)  # package release, with required dist tag
+        (?:\.(?P<arch>\w+))?    # optional package architecture
+        (?:\.rpm)?              # optional rpm extension
+        $
+        """,
+        flags=re.VERBOSE,
+    )
 
     #: RPM name
     name: str = attr.ib(validator=instance_of(str))
@@ -101,42 +102,6 @@ class Metadata:
     # Alternative constructors
 
     @classmethod
-    def from_file(cls, file: BinaryIO) -> "Metadata":
-        """Read metadata from an RPM file.
-
-        Keyword arguments:
-            file: The IO object to read the metadata from.
-                It has to provide a file descriptor – in-memory
-                files are unsupported.
-
-        Returns:
-            New instance of Metadata.
-        """
-
-        transaction = _rpm.TransactionSet()
-        # Ignore missing signatures warning
-        transaction.setVSFlags(_rpm._RPMVSF_NOSIGNATURES)
-
-        header = transaction.hdrFromFdno(file.fileno())
-
-        # Decode the attributes
-        attributes = {
-            "name": header[_rpm.RPMTAG_NAME].decode("utf-8"),
-            "version": header[_rpm.RPMTAG_VERSION].decode("utf-8"),
-            "release": header[_rpm.RPMTAG_RELEASE].decode("utf-8"),
-            "epoch": header[_rpm.RPMTAG_EPOCHNUM],
-        }
-
-        # For source RPMs the architecture reported is a binary one
-        # for some reason
-        if header[_rpm.RPMTAG_SOURCEPACKAGE]:
-            attributes["arch"] = "src"
-        else:
-            attributes["arch"] = header[_rpm.RPMTAG_ARCH].decode("utf-8")
-
-        return cls(**attributes)
-
-    @classmethod
     def from_nevra(cls, nevra: str) -> "Metadata":
         """Parse a string NEVRA and converts it to respective fields.
 
@@ -145,6 +110,9 @@ class Metadata:
 
         Returns:
             New instance of Metadata.
+
+        Raises:
+            ValueError: The :ref:`nevra` argument is not valid NEVRA string.
         """
 
         arguments = {}
@@ -154,15 +122,19 @@ class Metadata:
             arguments["epoch"] = match.group(1)
             return ""
 
-        nvra = EPOCH_RE.sub(replace_epoch, nevra, count=1)
+        nvra = cls._EPOCH_RE.sub(replace_epoch, nevra, count=1)
 
         # Parse the rest of the string
-        match = NVRA_re.match(nvra)
+        match = cls._NVRA_RE.match(nvra)
         if not match:
             message = "Invalid NEVRA string: {}".format(nevra)
             raise ValueError(message)
 
-        arguments.update(match.groupdict())
+        arguments.update(
+            (name, value)
+            for name, value in match.groupdict().items()
+            if value is not None
+        )
 
         return cls(**arguments)
 
@@ -232,42 +204,62 @@ class Metadata:
 
 
 @attr.s(slots=True, frozen=True, hash=True, cmp=False)
-class LocalPackage(Metadata):
-    """Metadata of existing RPM package on local file system."""
+class LocalPackage:
+    """Existing RPM package on local file system."""
 
     #: Resolved path to the RPM package
-    path = attr.ib(converter=_resolve_path)
+    path: Path = attr.ib(converter=_normalize_path)
 
-    @path.default
-    def pkg_in_cwd(self):
-        """Canonically named package in current directory"""
-
-        return Path.cwd() / self.canonical_file_name
+    #: Metadata of the package
+    metadata: Metadata = attr.ib(validator=instance_of(Metadata))
 
     @path.validator
     def _existing_file_path(self, _attribute, path):
-        """The path must point to an existing file"""
+        """The path must point to an existing file.
+
+        Raises:
+            FileNotFoundError: The path does not points to a file.
+        """
 
         if not path.is_file():
             raise FileNotFoundError(path)
 
-    # Alternative constructors
-    @classmethod
-    def from_path(cls, path: Path) -> "LocalPackage":
-        """Read metadata for specified RPM file path.
+    @metadata.default
+    def _file_metadata(self) -> Metadata:
+        """Read metadata from an RPM file.
 
         Keyword arguments:
-            path: The path to the file to read metadata for.
+            file: The IO object to read the metadata from.
+                It has to provide a file descriptor – in-memory
+                files are unsupported.
 
         Returns:
-            New instance of LocalPackage.
+            New instance of Metadata.
         """
 
-        with path.open(mode="rb") as file:
-            metadata = attr.asdict(Metadata.from_file(cast(BinaryIO, file)))
+        transaction = _rpm.TransactionSet()
+        # Ignore missing signatures warning
+        transaction.setVSFlags(_rpm._RPMVSF_NOSIGNATURES)
 
-        metadata["path"] = path
-        return cls(**metadata)
+        with self.path.open(mode="rb") as file:
+            header = transaction.hdrFromFdno(file.fileno())
+
+        # Decode the metadata
+        metadata = {
+            "name": header[_rpm.RPMTAG_NAME].decode("utf-8"),
+            "version": header[_rpm.RPMTAG_VERSION].decode("utf-8"),
+            "release": header[_rpm.RPMTAG_RELEASE].decode("utf-8"),
+            "epoch": header[_rpm.RPMTAG_EPOCHNUM],
+        }
+
+        # For source RPMs the architecture reported is a binary one
+        # for some reason
+        if header[_rpm.RPMTAG_SOURCEPACKAGE]:
+            metadata["arch"] = "src"
+        else:
+            metadata["arch"] = header[_rpm.RPMTAG_ARCH].decode("utf-8")
+
+        return Metadata(**metadata)
 
     # Path-like protocol
     def __fspath__(self) -> str:
