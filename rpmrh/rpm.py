@@ -7,6 +7,7 @@ from typing import Any
 from typing import BinaryIO
 from typing import Callable
 from typing import cast
+from typing import ClassVar
 from typing import Tuple
 from typing import Union
 
@@ -21,20 +22,6 @@ _rpm = system_import("rpm")
 CompareOperator = Callable[[Any, Any], bool]
 
 
-# NEVRA-related regular expressions
-EPOCH_RE = re.compile(r"(\d+):")
-NVRA_re = re.compile(
-    r"""
-    ^
-    (?P<name>\S+)-          # package name
-    (?P<version>[\w.]+)-    # package version
-    (?P<release>\w+(?:\.[\w+]+)+?)  # package release, with required dist tag
-    (?:\.(?P<arch>\w+))?    # optional package architecture
-    (?:\.rpm)??             # optional rpm extension
-    $
-""",
-    flags=re.VERBOSE,
-)
 # .el7_4 format
 LONG_DIST_RE = re.compile(
     r"""
@@ -78,6 +65,22 @@ class Metadata:
     This class should act as a basis for all the RPM-like objects,
     providing common comparison and other "dunder" methods.
     """
+
+    #: Regular expression for extracting epoch from an NEVRA string
+    _EPOCH_RE: ClassVar = re.compile(r"(\d+):")
+    #: Regular expression for splitting up NVR string
+    _NVRA_RE: ClassVar = re.compile(
+        r"""
+        ^
+        (?P<name>\S+)-          # package name
+        (?P<version>[\w.]+)-    # package version
+        (?P<release>\w+(?:\.[\w+]+)+?)  # package release, with required dist tag
+        (?:\.(?P<arch>\w+))?    # optional package architecture
+        (?:\.rpm)?              # optional rpm extension
+        $
+        """,
+        flags=re.VERBOSE,
+    )
 
     #: RPM name
     name: str = attr.ib(validator=instance_of(str))
@@ -154,15 +157,19 @@ class Metadata:
             arguments["epoch"] = match.group(1)
             return ""
 
-        nvra = EPOCH_RE.sub(replace_epoch, nevra, count=1)
+        nvra = cls._EPOCH_RE.sub(replace_epoch, nevra, count=1)
 
         # Parse the rest of the string
-        match = NVRA_re.match(nvra)
+        match = cls._NVRA_RE.match(nvra)
         if not match:
             message = "Invalid NEVRA string: {}".format(nevra)
             raise ValueError(message)
 
-        arguments.update(match.groupdict())
+        arguments.update(
+            (name, value)
+            for name, value in match.groupdict().items()
+            if value is not None
+        )
 
         return cls(**arguments)
 
