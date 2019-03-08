@@ -1,7 +1,7 @@
 """Utilities for logging"""
-
 import logging
 from contextlib import contextmanager
+from typing import Iterator
 
 import click
 from click_log import ColorFormatter
@@ -27,7 +27,7 @@ def basic_config(logger: logging.Logger) -> logging.Logger:
 
     logger.handlers = [handler]
 
-    return handler
+    return logger
 
 
 def quiet_option(
@@ -67,7 +67,7 @@ def quiet_option(
 
 
 @contextmanager
-def force_debug_messages(logger: logging.Logger) -> None:
+def force_debug_messages(logger: logging.Logger) -> Iterator[None]:
     """Force emitting debug messages for a code section.
 
     Keyword arguments:

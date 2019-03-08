@@ -1,12 +1,14 @@
 """Utilities for network calls."""
-
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
 
 import requests
 from requests_file import FileAdapter
 
 
-def default_requests_session(session: Optional[requests.Session] = None):
+def default_requests_session(
+    session: Optional[requests.Session] = None
+) -> requests.Session:
     """Create a requests.Session with suitable default values.
 
     This function is intended for use by functions that can utilize
