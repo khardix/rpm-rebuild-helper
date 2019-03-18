@@ -1,6 +1,9 @@
 """Test the rpmrh.rpm module."""
 import sys
 from types import MappingProxyType
+from typing import List
+from typing import Mapping
+from typing import Union
 
 import attr
 import pytest
@@ -8,7 +11,7 @@ import pytest
 from rpmrh import rpm
 
 
-METADATA_PARAMETERS = [
+METADATA_PARAMETERS: List[Union[str, Mapping[str, str]]] = [
     # Only required fields
     MappingProxyType({"name": "rpmrh", "version": "0.1.0", "release": "1.fc26"}),
     # All possible fields
@@ -143,6 +146,12 @@ def test_construction_from_file_name(nevra):
     filename = ".".join((nevra, "rpm"))
 
     assert rpm.Metadata.from_nevra(nevra) == rpm.Metadata.from_nevra(filename)
+
+
+def test_local_package_is_packagelike():
+    """The rpm.LocalPackage implements rpm.PackageLike protocol."""
+
+    assert isinstance(rpm.LocalPackage, rpm.PackageLike)
 
 
 def test_construction_from_path(minimal_srpm_path):

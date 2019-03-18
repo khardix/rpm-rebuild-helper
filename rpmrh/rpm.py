@@ -7,11 +7,14 @@ from typing import Any
 from typing import Callable
 from typing import cast
 from typing import ClassVar
+from typing import Optional
 from typing import Tuple
 from typing import Union
 
 import attr
 from attr.validators import instance_of
+from typing_extensions import Protocol
+from typing_extensions import runtime
 
 from .util import system_import
 
@@ -213,6 +216,14 @@ class SoftwareCollection:
     dist: str = attr.ib()
 
 
+@runtime
+class PackageLike(Protocol):
+    """Any kind of RPM package descriptor or reference"""
+
+    metadata: Metadata
+    scl: Optional[SoftwareCollection] = None
+
+
 @attr.s(slots=True, frozen=True, hash=True, cmp=False)
 class LocalPackage:
     """Existing RPM package on local file system."""
@@ -222,6 +233,9 @@ class LocalPackage:
 
     #: Metadata of the package
     metadata: Metadata = attr.ib(validator=instance_of(Metadata))
+
+    #: SoftwareCollection this package is part of
+    scl: Optional[SoftwareCollection] = attr.ib(default=None)
 
     @path.validator
     def _existing_file_path(self, _attribute, path):
