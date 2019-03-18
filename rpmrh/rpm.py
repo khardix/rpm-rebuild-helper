@@ -203,6 +203,16 @@ class Metadata:
         return self.nevra
 
 
+@attr.s(slots=True, frozen=True, cmp=False)
+class SoftwareCollection:
+    """Description of RPM Software collection"""
+
+    #: The canonical identifier (``rh-postgresql96``)
+    identifier: str = attr.ib()
+    #: Distribution tag (``el7``)
+    dist: str = attr.ib()
+
+
 @attr.s(slots=True, frozen=True, hash=True, cmp=False)
 class LocalPackage:
     """Existing RPM package on local file system."""
