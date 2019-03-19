@@ -24,18 +24,6 @@ _rpm = system_import("rpm")
 CompareOperator = Callable[[Any, Any], bool]
 
 
-# .el7_4 format
-LONG_DIST_RE = re.compile(
-    r"""
-    (\.         # short dist tag starts with a dot…
-    [^\W\d_]+   # … followed by at least one letter…
-    \d+)        # … and ended by at least one digit
-    [^.]*  # any other characters up to the next dot
-""",
-    flags=re.VERBOSE,
-)
-
-
 # Argument normalization
 _DEFAULT_EPOCH: int = 0
 _DEFAULT_ARCH: str = "src"
@@ -80,6 +68,17 @@ class Metadata:
         (?:\.rpm)?              # optional rpm extension
         $
         """,
+        flags=re.VERBOSE,
+    )
+
+    # .el7_4 format
+    _DIST_RE: ClassVar = re.compile(
+        r"""
+        (\.         # short dist tag starts with a dot…
+        [^\W\d_]+   # … followed by at least one letter…
+        \d+)        # … and ended by at least one digit
+        [^.]*  # any other characters up to the next dot
+    """,
         flags=re.VERBOSE,
     )
 
@@ -144,6 +143,17 @@ class Metadata:
     # Derived attributes
 
     @property
+    def dist(self) -> Optional[str]:
+        """RPM distribution tag.
+
+        The dist tag is extracted from the release field.
+        If none is found, None is returned.
+        """
+
+        match = self._DIST_RE.search(self.release)
+        return match.group() if match is not None else None
+
+    @property
     def nvr(self) -> str:
         """:samp:`{name}-{version}-{release}` string of the RPM object"""
 
@@ -205,23 +215,33 @@ class Metadata:
     def __str__(self) -> str:
         return self.nevra
 
+    # Transformations
+    def with_simple_dist(self) -> "Metadata":
+        """Create a copy of itself with simplified dist tag.
 
-@attr.s(slots=True, frozen=True, cmp=False)
-class SoftwareCollection:
-    """Description of RPM Software collection"""
+        Simplified dist tag is always in the form of :samp:`{distro}{major}`.
 
-    #: The canonical identifier (``rh-postgresql96``)
-    identifier: str = attr.ib()
-    #: Distribution tag (``el7``)
-    dist: str = attr.ib()
+        Examples:
+            >>> Metadata.from_nevra('abcde-1.0-1.el7_4').with_simple_dist().nvr
+            'abcde-1.0-1.el7'
+            >>> Metadata.from_nevra('binutils-3.6-4.el8+4').with_simple_dist().nvr
+            'binutils-3.6-4.el8'
+            >>> Metadata.from_nevra('abcde-1.0-1.fc27').with_simple_dist().nvr
+            'abcde-1.0-1.fc27'
+        """
+
+        simple_release = self._DIST_RE.sub(r"\g<1>", self.release)
+        return attr.evolve(self, release=simple_release)
 
 
 @runtime
 class PackageLike(Protocol):
     """Any kind of RPM package descriptor or reference"""
 
+    #: The metadata associated with the object
     metadata: Metadata
-    scl: Optional[SoftwareCollection] = None
+    #: Software Collection identifier (rh-postgresql96)
+    scl: Optional[str] = None
 
 
 @attr.s(slots=True, frozen=True, hash=True, cmp=False)
@@ -235,7 +255,7 @@ class LocalPackage:
     metadata: Metadata = attr.ib(validator=instance_of(Metadata))
 
     #: SoftwareCollection this package is part of
-    scl: Optional[SoftwareCollection] = attr.ib(default=None)
+    scl: Optional[str] = attr.ib(default=None)
 
     @path.validator
     def _existing_file_path(self, _attribute, path):
@@ -310,4 +330,4 @@ def shorten_dist_tag(metadata: Metadata) -> Metadata:
         Potentially modified metadata.
     """
 
-    return attr.evolve(metadata, release=LONG_DIST_RE.sub(r"\1", metadata.release))
+    return metadata.with_simple_dist()
