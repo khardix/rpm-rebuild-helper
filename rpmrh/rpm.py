@@ -7,6 +7,7 @@ from typing import Any
 from typing import Callable
 from typing import cast
 from typing import ClassVar
+from typing import NewType
 from typing import Optional
 from typing import Tuple
 from typing import Union
@@ -276,6 +277,10 @@ class Metadata:
         return attr.evolve(self, release=simple_release)
 
 
+#: Software Collection identifier (i.e. ``rh-postgresql96``)
+SoftwareCollection = NewType("SoftwareCollection", str)
+
+
 @runtime
 class PackageLike(Protocol):
     """Any kind of RPM package descriptor or reference"""
@@ -283,7 +288,7 @@ class PackageLike(Protocol):
     #: The metadata associated with the object
     metadata: Metadata
     #: Software Collection identifier (rh-postgresql96)
-    scl: Optional[str] = None
+    scl: Optional[SoftwareCollection] = None
 
 
 @attr.s(slots=True, frozen=True, hash=True, cmp=False)
