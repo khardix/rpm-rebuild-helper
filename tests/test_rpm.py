@@ -165,6 +165,16 @@ def test_construction_from_path(minimal_srpm_path):
     assert package.path == minimal_srpm_path
 
 
+def test_dist_tag_describes_expected_parts(nevra):
+    """Metadata.dist object describes expected parts of the distribution tag"""
+
+    dist = rpm.Metadata.from_nevra(nevra).dist
+
+    assert dist.identifier == "fc"
+    assert dist.major == 26
+    assert dist.trailing == ""
+
+
 @pytest.mark.parametrize(
     "original_nvr,result_nvr",
     [

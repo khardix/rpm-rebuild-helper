@@ -55,6 +55,55 @@ class Metadata:
     providing common comparison and other "dunder" methods.
     """
 
+    @attr.s(frozen=True, slots=True)
+    class DistTag:
+        """Rich(er) representation of the distribution tag information."""
+
+        #: Regular expression for finding and retrieving the tag from release
+        _RE: ClassVar = re.compile(
+            r"""\.              # short dist tag starts with a dot…
+            (?P<id>[^\W\d_]+)   # … followed by at least one letter…
+            (?P<major>\d+)      # … and ended by at least one digit
+            (?P<trail>[^.]*)    # any other characters up to the next dot
+        """,
+            flags=re.VERBOSE,
+        )
+
+        #: Distribution identifier (i.e. ``el``)
+        identifier: str = attr.ib()
+        #: Major distribution version
+        major: int = attr.ib(converter=int)
+        #: Trailing information from the dist tag
+        trailing: str = attr.ib(default="")
+
+        @classmethod
+        def from_release(cls, release_string: str) -> "Metadata.DistTag":
+            """Attempt to parse distribution tag from release_string.
+
+            Arguments:
+                release_string: The release string to search in.
+
+            Returns:
+                Parsed DistTag.
+
+            Raises:
+                ValueError: No distribution tag found in release_string.
+            """
+
+            match = cls._RE.search(release_string)
+            if match is None:
+                message = "No distribution tag found in release string"
+                raise ValueError(message, release_string)
+
+            return cls(
+                identifier=match.group("id"),
+                major=match.group("major"),
+                trailing=match.group("trail"),
+            )
+
+        def __str__(self) -> str:
+            return "".join(map(str, attr.astuple(self)))
+
     #: Regular expression for extracting epoch from an NEVRA string
     _EPOCH_RE: ClassVar = re.compile(r"(\d+):")
     #: Regular expression for splitting up NVR string
@@ -72,15 +121,6 @@ class Metadata:
     )
 
     # .el7_4 format
-    _DIST_RE: ClassVar = re.compile(
-        r"""
-        (\.         # short dist tag starts with a dot…
-        [^\W\d_]+   # … followed by at least one letter…
-        \d+)        # … and ended by at least one digit
-        [^.]*  # any other characters up to the next dot
-    """,
-        flags=re.VERBOSE,
-    )
 
     #: RPM name
     name: str = attr.ib(validator=instance_of(str))
@@ -143,15 +183,17 @@ class Metadata:
     # Derived attributes
 
     @property
-    def dist(self) -> Optional[str]:
+    def dist(self) -> Optional["Metadata.DistTag"]:
         """RPM distribution tag.
 
         The dist tag is extracted from the release field.
         If none is found, None is returned.
         """
 
-        match = self._DIST_RE.search(self.release)
-        return match.group() if match is not None else None
+        try:
+            return self.DistTag.from_release(self.release)
+        except ValueError:
+            return None
 
     @property
     def nvr(self) -> str:
@@ -230,7 +272,7 @@ class Metadata:
             'abcde-1.0-1.fc27'
         """
 
-        simple_release = self._DIST_RE.sub(r"\g<1>", self.release)
+        simple_release = self.DistTag._RE.sub(r".\g<id>\g<major>", self.release)
         return attr.evolve(self, release=simple_release)
 
 
