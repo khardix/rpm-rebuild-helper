@@ -285,10 +285,15 @@ SoftwareCollection = NewType("SoftwareCollection", str)
 class PackageLike(Protocol):
     """Any kind of RPM package descriptor or reference"""
 
-    #: The metadata associated with the object
-    metadata: Metadata
-    #: Software Collection identifier (rh-postgresql96)
-    scl: Optional[SoftwareCollection] = None
+    @property
+    def metadata(self) -> Metadata:
+        """The metadata associated with the object"""
+        ...
+
+    @property
+    def scl(self) -> Optional[SoftwareCollection]:
+        """Software Collection identifier (rh-postgresql96)"""
+        ...
 
 
 @attr.s(slots=True, frozen=True, hash=True, cmp=False)
