@@ -6,16 +6,18 @@ from typing import Dict
 from typing import List
 from typing import Optional
 from typing import TextIO
+from typing import TYPE_CHECKING
 
 import attr
 from ruamel import yaml
 from typing_extensions import Final
 
-from .rpm import PackageLike
-from .rpm import SoftwareCollection
+if TYPE_CHECKING:
+    from .rpm import PackageLike  # noqa: F401
+    from .rpm import SoftwareCollection  # noqa: F401
 
 # Collection -> Distribution -> [Package]
-ResultDict = Dict[Optional[SoftwareCollection], Dict[str, List[PackageLike]]]
+ResultDict = Dict[Optional["SoftwareCollection"], Dict[str, List["PackageLike"]]]
 
 
 class _YAMLTag(str, Enum):
@@ -83,7 +85,7 @@ class Container:
     #: Mapping of successfully processed items (packages)
     result: ResultDict = attr.ib(factory=dict)
 
-    def insert_package(self, package: PackageLike) -> None:
+    def insert_package(self, package: "PackageLike") -> None:
         """Insert package to it's canonical place."""
 
         scl_dict = self.result.setdefault(package.scl, {})

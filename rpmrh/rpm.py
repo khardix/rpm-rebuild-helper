@@ -14,9 +14,11 @@ from typing import Union
 
 import attr
 from attr.validators import instance_of
+from ruamel import yaml
 from typing_extensions import Protocol
 from typing_extensions import runtime
 
+from . import report
 from .util import system_import
 
 _rpm = system_import("rpm")
@@ -296,9 +298,12 @@ class PackageLike(Protocol):
         ...
 
 
-@attr.s(slots=True, frozen=True, hash=True, cmp=False)
+@yaml.yaml_object(report.TYPE_REGISTRY)
+@attr.s(slots=True, frozen=True, hash=True)
 class LocalPackage:
     """Existing RPM package on local file system."""
+
+    yaml_tag: ClassVar[str] = "!local"
 
     #: Resolved path to the RPM package
     path: Path = attr.ib(converter=_normalize_path)
@@ -361,9 +366,23 @@ class LocalPackage:
     def __fspath__(self) -> str:
         return str(self.path)
 
-    # String representation
+    # Representations
     def __str__(self):
         return self.__fspath__()
+
+    @classmethod
+    def to_yaml(
+        cls, representer: yaml.Representer, instance: "LocalPackage"
+    ) -> yaml.Node:
+        node = representer.represent_data(instance.path)
+        node.tag = cls.yaml_tag
+        return node
+
+    @classmethod
+    def from_yaml(
+        cls, constructor: yaml.Constructor, node: yaml.ScalarNode
+    ) -> "LocalPackage":
+        return cls(path=constructor.construct_scalar(node))
 
 
 # Utility functions
