@@ -60,6 +60,15 @@ def filled_container(registered_packages) -> report.Container:
     return result
 
 
+def test_registry_represents_none(registry):
+    """The None value is represented/constructed as expected."""
+    node = registry.representer.represent_data(None)
+    assert node.value == "~"
+
+    value = registry.constructor.construct_object(node)
+    assert value is None
+
+
 def test_is_inserted_to_expected_place(registered_packages, filled_container):
     """Any package inserted can be located at expected place"""
 
