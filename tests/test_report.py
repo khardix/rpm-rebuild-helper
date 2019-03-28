@@ -1,4 +1,5 @@
 """Tests for the result serialization format"""
+from pathlib import Path
 from textwrap import dedent
 from typing import Iterable
 from typing import Optional
@@ -67,6 +68,18 @@ def test_registry_represents_none(registry):
 
     value = registry.constructor.construct_object(node)
     assert value is None
+
+
+def test_registry_represents_path(registry):
+    """The registry can represent and construct path objects."""
+
+    original = Path.cwd()
+
+    node = registry.representer.represent_data(original)
+    assert node.value == str(original)
+
+    value = registry.constructor.construct_object(node)
+    assert value == original
 
 
 def test_is_inserted_to_expected_place(registered_packages, filled_container):
