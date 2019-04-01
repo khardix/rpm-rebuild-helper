@@ -1,12 +1,17 @@
 """Serialization and deserialization of processing results."""
 from enum import Enum
+from functools import partial
 from io import StringIO
 from pathlib import Path
+from typing import Callable
+from typing import cast
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import TextIO
+from typing import Type
 from typing import TYPE_CHECKING
+from typing import Union
 
 import attr
 from ruamel import yaml
@@ -76,6 +81,33 @@ class _SafeTypeConverter(yaml.YAML):
 
 #: Known result types
 TYPE_REGISTRY: Final = _SafeTypeConverter()
+
+
+def serializable(
+    cls: Optional[Type] = None, *, registry: yaml.YAML = TYPE_REGISTRY
+) -> Union[Type, Callable[[Type], Type]]:
+    """Marker decorator for types that can be serialized as part of a report.
+
+    Arguments:
+        cls: The type to be marked safe for serialization.
+        registry: The type registry in charge of the serialization.
+
+    Returns:
+        If the `cls` is provided, returns the type unchanged.
+        Otherwise, it returns itself with the keyword arguments bound.
+
+        This behavior results in the decorator calls
+        ``@serializable``, ``@serializable()``, and ``@serializable(registry=X)``
+        to be all valid and work as expected.
+    """
+
+    if cls is None:
+        bound = partial(serializable, registry=registry)
+        return cast(Callable[[Type], Type], bound)  # mypy hint
+
+    registry.register_class(cls)
+
+    return cls
 
 
 @attr.s(slots=True, frozen=True)

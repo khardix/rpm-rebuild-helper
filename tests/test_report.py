@@ -29,6 +29,7 @@ def registry() -> report._SafeTypeConverter:
 def registered_packages(registry) -> Iterable[rpm.PackageLike]:
     """Iterable of packages of registered type"""
 
+    @report.serializable(registry=registry)
     @attr.s(frozen=True, slots=True)
     class Package:
         metadata: rpm.Metadata = attr.ib()
@@ -39,8 +40,6 @@ def registered_packages(registry) -> Iterable[rpm.PackageLike]:
             return representer.represent_scalar(
                 report._YAMLTag.STRING, "{.metadata.nvr}".format(data)
             )
-
-    registry.register_class(Package)
 
     return [
         Package(

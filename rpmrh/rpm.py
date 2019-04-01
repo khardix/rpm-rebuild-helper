@@ -298,7 +298,7 @@ class PackageLike(Protocol):
         ...
 
 
-@yaml.yaml_object(report.TYPE_REGISTRY)
+@report.serializable
 @attr.s(slots=True, frozen=True, hash=True)
 class LocalPackage:
     """Existing RPM package on local file system."""
