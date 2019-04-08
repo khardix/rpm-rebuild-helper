@@ -7,9 +7,10 @@ services:
 language: python
 
 env:
-  - BASE_OS='fedora:rawhide' INSTALLER='dnf'
-  - BASE_OS='fedora:29' INSTALLER='dnf'
-  - BASE_OS='fedora:28' INSTALLER='dnf'
+  - BASE_OS='fedora:rawhide'
+  - BASE_OS='fedora:30'
+  - BASE_OS='fedora:29'
+  - BASE_OS='fedora:28'
 
 branches:
   except:
