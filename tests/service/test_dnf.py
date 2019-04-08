@@ -44,11 +44,11 @@ def configured_group(repo_configuration):
 def test_package_is_converted(raw_package):
     """Raw dnf.Package is successfully converted"""
 
-    metadata = dnf.convert_metadata(raw_package)
+    package = dnf.Package.from_internal_dnf_package(raw_package)
 
-    assert isinstance(metadata, rpm.Metadata)
-    assert metadata.name == raw_package.name
-    assert metadata.epoch == raw_package.epoch
+    assert isinstance(package, rpm.PackageLike)
+    assert package.metadata.name == raw_package.name
+    assert package.metadata.epoch == raw_package.epoch
 
 
 def test_repo_builds_are_reported(configured_group, minimal_srpm_path):
@@ -60,8 +60,8 @@ def test_repo_builds_are_reported(configured_group, minimal_srpm_path):
 
     build, = builds
 
-    assert isinstance(build, rpm.Metadata)
-    assert build == rpm.LocalPackage(minimal_srpm_path).metadata
+    assert isinstance(build, dnf.Package)
+    assert build.metadata == rpm.LocalPackage(minimal_srpm_path).metadata
 
 
 def test_packages_are_downloaded(configured_group, minimal_srpm_path, tmpdir_factory):
