@@ -205,11 +205,12 @@ def configuration_file(fs, configuration_profile):
 
 @pytest.fixture
 def built_package():
-    """Metadata for Koji's built package"""
+    """Koji's built package"""
 
-    return koji.BuiltPackage(
-        id=18218, name="rh-ror50", version="5.0", release="5.el7", arch="x86_64"
+    metadata = rpm.Metadata(
+        name="rh-ror50", version="5.0", release="5.el7", arch="x86_64"
     )
+    return koji.BuiltPackage(id=18218, metadata=metadata, scl="rh-ror50")
 
 
 @pytest.fixture
@@ -242,7 +243,9 @@ def mutable_repo_service(service, built_package):
     """Service with mocked session for MutableRepo testing"""
 
     basic_state = MockMutableRepo()
-    basic_state.content["build_tag"][built_package.name] = {built_package.nvr}
+    basic_state.content["build_tag"][built_package.metadata.name] = {
+        built_package.metadata.nvr
+    }
 
     attr.set_run_validators(False)
     mock_service = attr.evolve(service, session=basic_state)
@@ -272,6 +275,12 @@ def existing_package(new_package):
     desired_path.unlink()
 
 
+def test_built_package_is_packagelike(built_package):
+    """BuiltPackage conforms to the PackageLike protocol"""
+
+    assert isinstance(built_package, rpm.PackageLike)
+
+
 def test_built_package_from_mapping():
     """BuiltPackage can be constructed from raw mapping with extra data."""
 
@@ -290,7 +299,7 @@ def test_built_package_from_mapping():
     built = koji.BuiltPackage.from_mapping(mapping)
 
     assert built.id == mapping["id"]
-    assert built.nvr == mapping["nvr"]
+    assert built.metadata.nvr == mapping["nvr"]
 
 
 def test_built_package_from_incomplete_mapping():
@@ -305,14 +314,9 @@ def test_built_package_from_incomplete_mapping():
 def test_built_package_from_metadata(built_package, service):
     """BuiltPackage can fetch missing data from a service."""
 
-    metadata = rpm.Metadata(
-        name=built_package.name,
-        version=built_package.version,
-        release=built_package.release,
-        arch=built_package.arch,
+    fetched = koji.BuiltPackage.from_metadata(
+        service=service, original=built_package.metadata
     )
-
-    fetched = koji.BuiltPackage.from_metadata(service=service, original=metadata)
 
     assert fetched.id == built_package.id
 
@@ -343,7 +347,7 @@ def test_service_from_profile_name(configuration_file):
 def test_service_latest_builds(service, tag_name, expected_nvr_set):
     """Latest builds are properly extracted from the service"""
 
-    results = {build.nvr for build in service.latest_builds(tag_name)}
+    results = {build.metadata.nvr for build in service.latest_builds(tag_name)}
 
     assert results == expected_nvr_set
 
@@ -364,12 +368,18 @@ def test_latest_builds_are_not_obsoletes(service, tag_name):
     """
 
     def obsolete(package, existing_map):
-        return package.name in existing_map and existing_map[package.name] > package
+        return (
+            package.metadata.name in existing_map
+            and existing_map[package.metadata.name].metadata > package.metadata
+        )
+
+    by_name = attrgetter("metadata.name")
+    by_metadata = attrgetter("metadata")
 
     existing_raw = service.session.listTagged(tag_name)
     existing = map(koji.BuiltPackage.from_mapping, existing_raw)
-    existing = groupby(sorted(existing), key=attrgetter("name"))
-    existing = {k: max(g) for k, g in existing}
+    existing = groupby(sorted(existing, key=by_metadata), key=by_name)
+    existing = {k: max(g, key=by_metadata) for k, g in existing}
 
     latest = list(service.latest_builds(tag_name))
 
@@ -411,7 +421,7 @@ def test_service_download(service, tmpdir, built_package):
 
     result = service.download(built_package, Path(str(tmpdir)))
 
-    assert result.metadata == built_package
+    assert result.metadata == built_package.metadata
 
 
 def test_build_reports_nonexistent_target(build_service, new_package):
@@ -427,7 +437,7 @@ def test_new_package_builds_successfully(build_service, new_package):
     result_package = build_service.build("test", new_package)
 
     assert result_package
-    assert result_package == new_package.metadata
+    assert result_package.metadata == new_package.metadata
 
 
 def test_existing_package_build_raises(build_service, existing_package):
@@ -443,4 +453,4 @@ def test_existing_build_can_be_tagged(mutable_repo_service, built_package):
     mutable_repo_service.tag_build("test_tag", built_package, owner="testuser")
     state = mutable_repo_service.session.content
 
-    assert built_package.name in state["test_tag"]
+    assert built_package.metadata.name in state["test_tag"]

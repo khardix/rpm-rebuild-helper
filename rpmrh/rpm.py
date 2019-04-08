@@ -7,30 +7,24 @@ from typing import Any
 from typing import Callable
 from typing import cast
 from typing import ClassVar
+from typing import NewType
+from typing import Optional
 from typing import Tuple
 from typing import Union
 
 import attr
 from attr.validators import instance_of
+from ruamel import yaml
+from typing_extensions import Protocol
+from typing_extensions import runtime
 
+from . import report
 from .util import system_import
 
 _rpm = system_import("rpm")
 
 # type aliases and helpers
 CompareOperator = Callable[[Any, Any], bool]
-
-
-# .el7_4 format
-LONG_DIST_RE = re.compile(
-    r"""
-    (\.         # short dist tag starts with a dot…
-    [^\W\d_]+   # … followed by at least one letter…
-    \d+)        # … and ended by at least one digit
-    [^.]*  # any other characters up to the next dot
-""",
-    flags=re.VERBOSE,
-)
 
 
 # Argument normalization
@@ -64,6 +58,55 @@ class Metadata:
     providing common comparison and other "dunder" methods.
     """
 
+    @attr.s(frozen=True, slots=True)
+    class DistTag:
+        """Rich(er) representation of the distribution tag information."""
+
+        #: Regular expression for finding and retrieving the tag from release
+        _RE: ClassVar = re.compile(
+            r"""\.              # short dist tag starts with a dot…
+            (?P<id>[^\W\d_]+)   # … followed by at least one letter…
+            (?P<major>\d+)      # … and ended by at least one digit
+            (?P<trail>[^.]*)    # any other characters up to the next dot
+        """,
+            flags=re.VERBOSE,
+        )
+
+        #: Distribution identifier (i.e. ``el``)
+        identifier: str = attr.ib()
+        #: Major distribution version
+        major: int = attr.ib(converter=int)
+        #: Trailing information from the dist tag
+        trailing: str = attr.ib(default="")
+
+        @classmethod
+        def from_release(cls, release_string: str) -> "Metadata.DistTag":
+            """Attempt to parse distribution tag from release_string.
+
+            Arguments:
+                release_string: The release string to search in.
+
+            Returns:
+                Parsed DistTag.
+
+            Raises:
+                ValueError: No distribution tag found in release_string.
+            """
+
+            match = cls._RE.search(release_string)
+            if match is None:
+                message = "No distribution tag found in release string"
+                raise ValueError(message, release_string)
+
+            return cls(
+                identifier=match.group("id"),
+                major=match.group("major"),
+                trailing=match.group("trail"),
+            )
+
+        def __str__(self) -> str:
+            return "".join(map(str, attr.astuple(self)))
+
     #: Regular expression for extracting epoch from an NEVRA string
     _EPOCH_RE: ClassVar = re.compile(r"(\d+):")
     #: Regular expression for splitting up NVR string
@@ -79,6 +122,8 @@ class Metadata:
         """,
         flags=re.VERBOSE,
     )
+
+    # .el7_4 format
 
     #: RPM name
     name: str = attr.ib(validator=instance_of(str))
@@ -139,6 +184,19 @@ class Metadata:
         return cls(**arguments)
 
     # Derived attributes
+
+    @property
+    def dist(self) -> Optional["Metadata.DistTag"]:
+        """RPM distribution tag.
+
+        The dist tag is extracted from the release field.
+        If none is found, None is returned.
+        """
+
+        try:
+            return self.DistTag.from_release(self.release)
+        except ValueError:
+            return None
 
     @property
     def nvr(self) -> str:
@@ -202,16 +260,59 @@ class Metadata:
     def __str__(self) -> str:
         return self.nevra
 
+    # Transformations
+    def with_simple_dist(self) -> "Metadata":
+        """Create a copy of itself with simplified dist tag.
 
-@attr.s(slots=True, frozen=True, hash=True, cmp=False)
+        Simplified dist tag is always in the form of :samp:`{distro}{major}`.
+
+        Examples:
+            >>> Metadata.from_nevra('abcde-1.0-1.el7_4').with_simple_dist().nvr
+            'abcde-1.0-1.el7'
+            >>> Metadata.from_nevra('binutils-3.6-4.el8+4').with_simple_dist().nvr
+            'binutils-3.6-4.el8'
+            >>> Metadata.from_nevra('abcde-1.0-1.fc27').with_simple_dist().nvr
+            'abcde-1.0-1.fc27'
+        """
+
+        simple_release = self.DistTag._RE.sub(r".\g<id>\g<major>", self.release)
+        return attr.evolve(self, release=simple_release)
+
+
+#: Software Collection identifier (i.e. ``rh-postgresql96``)
+SoftwareCollection = NewType("SoftwareCollection", str)
+
+
+@runtime
+class PackageLike(Protocol):
+    """Any kind of RPM package descriptor or reference"""
+
+    @property
+    def metadata(self) -> Metadata:
+        """The metadata associated with the object"""
+        ...
+
+    @property
+    def scl(self) -> Optional[SoftwareCollection]:
+        """Software Collection identifier (rh-postgresql96)"""
+        ...
+
+
+@report.serializable
+@attr.s(slots=True, frozen=True, hash=True)
 class LocalPackage:
     """Existing RPM package on local file system."""
+
+    yaml_tag: ClassVar[str] = "!local"
 
     #: Resolved path to the RPM package
     path: Path = attr.ib(converter=_normalize_path)
 
     #: Metadata of the package
     metadata: Metadata = attr.ib(validator=instance_of(Metadata))
+
+    #: SoftwareCollection this package is part of
+    scl: Optional[SoftwareCollection] = attr.ib(default=None)
 
     @path.validator
     def _existing_file_path(self, _attribute, path):
@@ -265,9 +366,23 @@ class LocalPackage:
     def __fspath__(self) -> str:
         return str(self.path)
 
-    # String representation
+    # Representations
     def __str__(self):
         return self.__fspath__()
+
+    @classmethod
+    def to_yaml(
+        cls, representer: yaml.Representer, instance: "LocalPackage"
+    ) -> yaml.Node:
+        node = representer.represent_data(instance.path)
+        node.tag = cls.yaml_tag
+        return node
+
+    @classmethod
+    def from_yaml(
+        cls, constructor: yaml.Constructor, node: yaml.ScalarNode
+    ) -> "LocalPackage":
+        return cls(path=constructor.construct_scalar(node))
 
 
 # Utility functions
@@ -286,4 +401,4 @@ def shorten_dist_tag(metadata: Metadata) -> Metadata:
         Potentially modified metadata.
     """
 
-    return attr.evolve(metadata, release=LONG_DIST_RE.sub(r"\1", metadata.release))
+    return metadata.with_simple_dist()

@@ -12,6 +12,7 @@ import requests
 from attr.validators import instance_of
 
 from .. import abc
+from ... import report
 from ... import rpm
 from ...configuration import service
 from ...util import default_requests_session
@@ -20,31 +21,44 @@ from ._compat import make_compatible
 
 if TYPE_CHECKING:
     import dnf
-    from dnf.package import Package as DNFPackage
 else:
     dnf = system_import("dnf")
-    DNFPackage = system_import("dnf.package", "Package")
 
 
-def convert_metadata(package: DNFPackage) -> rpm.Metadata:
-    """Convert DNFPackage to rpm.Metadata format.
+@report.serializable
+@attr.s(slots=True, frozen=True)
+class Package:
+    """Package information provided by DNF.
 
-    Keyword arguments:
-        package: The DNF package to extract metadata from.
-
-    Returns:
-        Metadata version of the input package.
+    The original `dnf.package.Package` is not designed
+    to be used without `dnf.base.Base` or `dnf.sack.Sack`.
+    This class thus serves as alternative container for the provided information
+    decoupled from the DNF internals.
     """
 
-    # The dnf.package.Package is not designed to be subclassed
-    # or used independently from the rest of the dnf objects (Base,
-    # Sack). Converting the Package to rpm.Metadata instead
-    # of toying with the Adapter pattern is probably for the best.
-    # Attempts at a reasonable Adapter implementation welcome :)
+    metadata: rpm.Metadata = attr.ib()
+    scl: Optional[rpm.SoftwareCollection] = attr.ib(default=None)
 
-    attributes = {a.name for a in attr.fields(rpm.Metadata)}
+    @classmethod
+    def from_internal_dnf_package(
+        cls, original: dnf.package.Package, **extra
+    ) -> "Package":
+        """Convert internal DNF package structure to decoupled representation.
 
-    return rpm.Metadata(**{a: getattr(package, a) for a in attributes})
+        Arguments:
+            original: The internal DNF package to be converted.
+
+        Keyword arguments: Extra values not extracted from original
+            (i.e. ``scl``).
+
+        Returns: Decoupled equivalent of the original.
+        """
+
+        metadata = rpm.Metadata(
+            **{a.name: getattr(original, a.name) for a in attr.fields(rpm.Metadata)}
+        )
+
+        return cls(metadata=metadata, **extra)
 
 
 @service.register("dnf", initializer="configured")
@@ -88,7 +102,7 @@ class RepoGroup(abc.Repository):
 
         return self.base.repos.keys()
 
-    def latest_builds(self, tag_name: str) -> Iterator[rpm.Metadata]:
+    def latest_builds(self, tag_name: str) -> Iterator[rpm.PackageLike]:
         """Provide metadata for all latest builds within a tag.
 
         Keyword arguments:
@@ -103,11 +117,11 @@ class RepoGroup(abc.Repository):
         self.base.fill_sack(load_system_repo=False)
 
         query = self.base.sack.query()
-        yield from map(convert_metadata, query.latest())
+        yield from map(Package.from_internal_dnf_package, query.latest())
 
     def download(
         self,
-        package: rpm.Metadata,
+        package: rpm.PackageLike,
         target_dir: Path,
         *,
         session: Optional[requests.Session] = None
@@ -129,13 +143,7 @@ class RepoGroup(abc.Repository):
         self.base.fill_sack(load_system_repo=False)
 
         query = self.base.sack.query()
-        candidate, = query.filter(
-            **attr.asdict(
-                package,
-                # filter=attr.filters.include(*attr.fields(rpm.Metadata)),
-                filter=lambda attrib, _val: attrib in attr.fields(rpm.Metadata),
-            )
-        )
+        (candidate,) = query.filter(**attr.asdict(package.metadata))
         source_url = candidate.remote_location()
 
         response = session.get(source_url, stream=True)

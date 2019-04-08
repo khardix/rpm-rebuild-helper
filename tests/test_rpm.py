@@ -1,14 +1,18 @@
 """Test the rpmrh.rpm module."""
 import sys
 from types import MappingProxyType
+from typing import List
+from typing import Mapping
+from typing import Union
 
 import attr
 import pytest
 
+from rpmrh import report
 from rpmrh import rpm
 
 
-METADATA_PARAMETERS = [
+METADATA_PARAMETERS: List[Union[str, Mapping[str, str]]] = [
     # Only required fields
     MappingProxyType({"name": "rpmrh", "version": "0.1.0", "release": "1.fc26"}),
     # All possible fields
@@ -145,6 +149,12 @@ def test_construction_from_file_name(nevra):
     assert rpm.Metadata.from_nevra(nevra) == rpm.Metadata.from_nevra(filename)
 
 
+def test_local_package_is_packagelike():
+    """The rpm.LocalPackage implements rpm.PackageLike protocol."""
+
+    assert isinstance(rpm.LocalPackage, rpm.PackageLike)
+
+
 def test_construction_from_path(minimal_srpm_path):
     """Metadata can be read for a file path."""
 
@@ -154,6 +164,27 @@ def test_construction_from_path(minimal_srpm_path):
     assert package.metadata.epoch == 0
     assert package.metadata.arch == "src"
     assert package.path == minimal_srpm_path
+
+
+def test_local_package_is_serializable(minimal_srpm_path):
+    """LocalPackage instance can be serialized to and loaded from YAML"""
+    package = rpm.LocalPackage(minimal_srpm_path)
+
+    node = report.TYPE_REGISTRY.representer.represent_data(package)
+    assert node.value == package.__fspath__()
+
+    roundtrip = report.TYPE_REGISTRY.constructor.construct_object(node)
+    assert roundtrip == package
+
+
+def test_dist_tag_describes_expected_parts(nevra):
+    """Metadata.dist object describes expected parts of the distribution tag"""
+
+    dist = rpm.Metadata.from_nevra(nevra).dist
+
+    assert dist.identifier == "fc"
+    assert dist.major == 26
+    assert dist.trailing == ""
 
 
 @pytest.mark.parametrize(

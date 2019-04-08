@@ -1,3 +1,3 @@
 """RPM repository interface"""
-from .interface import convert_metadata
-from .interface import RepoGroup
+from .interface import Package  # noqa: F401
+from .interface import RepoGroup  # noqa: F401
