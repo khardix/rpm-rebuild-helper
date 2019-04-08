@@ -1,10 +1,14 @@
 """Command Line Interface for the package"""
-
 import logging
-from collections import defaultdict, OrderedDict
-from datetime import timedelta, datetime, timezone
-from functools import reduce, lru_cache
-from itertools import product, chain
+from collections import defaultdict
+from collections import OrderedDict
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
+from functools import lru_cache
+from functools import reduce
+from itertools import chain
+from itertools import product
 from operator import attrgetter
 from pathlib import Path
 from typing import Iterator
@@ -13,13 +17,19 @@ import attr
 import click
 from ruamel import yaml
 
-from .tooling import SCL, Package, PackageStream
-from .tooling import stream_processor, stream_generator
-from .. import RESOURCE_ID, util, rpm, configuration
+from .. import configuration
+from .. import RESOURCE_ID
+from .. import rpm
+from .. import util
 from ..configuration._loading import load_matching_configuration
+from ..exception import UserError
 from ..service.abc import BuildFailure
 from ..service.jenkins import UnknownJob
-from ..exception import UserError
+from .tooling import Package
+from .tooling import PackageStream
+from .tooling import SCL
+from .tooling import stream_generator
+from .tooling import stream_processor
 
 
 # Logging setup
@@ -240,6 +250,11 @@ def diff(package_stream, min_days, simple_dist):
         entry_time = max(filter(None, entry_times), default=now)
         return (now - entry_time) >= timedelta(days=min_days)
 
+    def has_collection_prefix(build, collection):
+        """The package name indicates that it is the part of the collection"""
+
+        return build.name == collection or build.name.startswith(collection + "-")
+
     # SCL processing
     for pkg in package_stream:
         try:
@@ -252,13 +267,13 @@ def diff(package_stream, min_days, simple_dist):
             present = {
                 build.name: build
                 for build in destination_builds
-                if build.name.startswith(pkg.scl.collection)
+                if has_collection_prefix(build, pkg.scl.collection)
             }
 
             missing = {
                 build
                 for build in source_builds
-                if build.name.startswith(pkg.scl.collection)
+                if has_collection_prefix(build, pkg.scl.collection)
                 and not obsolete(build, present)
             }
 
