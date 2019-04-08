@@ -5,7 +5,6 @@ import time
 from datetime import datetime
 from datetime import timezone
 from itertools import groupby
-from itertools import starmap
 from operator import attrgetter
 from operator import itemgetter
 from pathlib import Path
@@ -23,6 +22,7 @@ from attr.validators import optional
 from click import style
 
 from . import abc
+from .. import report
 from .. import rpm
 from ..configuration import service
 from ..util import system_import
@@ -35,8 +35,9 @@ else:
 logger = logging.getLogger(__name__)
 
 
+@report.serializable
 @attr.s(slots=True, frozen=True, cmp=False)
-class BuiltPackage(rpm.Metadata):
+class BuiltPackage:
     """Data for a built RPM package presented by a Koji service.
 
     This class serves as an adaptor between build data provided as
@@ -44,10 +45,18 @@ class BuiltPackage(rpm.Metadata):
     """
 
     #: Unique identification of a build within the service
-    id = attr.ib(validator=instance_of(int), converter=int, default=None)
+    id: int = attr.ib(validator=instance_of(int), converter=int)
+
+    #: Metadata associated with the build
+    metadata: rpm.Metadata = attr.ib()
+
+    #: The software collection this build is part of
+    scl: Optional[rpm.SoftwareCollection] = attr.ib(default=None)
 
     @classmethod
-    def from_mapping(cls, raw_data: Mapping) -> "BuiltPackage":
+    def from_mapping(
+        cls, raw_data: Mapping, *, scl: Optional[rpm.SoftwareCollection] = None
+    ) -> "BuiltPackage":
         """Explicitly create BuiltPackage from mapping that contain extra keys.
 
         This constructor accepts any existing mapping and cherry-picks
@@ -56,21 +65,25 @@ class BuiltPackage(rpm.Metadata):
 
         Keyword arguments:
             raw_data: The mapping that should be used for the initialization.
+            scl: The software collection this build is part of.
 
         Returns:
             New BuiltPackage instance.
         """
 
-        valid_keys = {attribute.name for attribute in attr.fields(cls)}
-        known_data = {
-            key: value for key, value in raw_data.items() if key in valid_keys
-        }
+        metadata_keys = {attribute.name for attribute in attr.fields(rpm.Metadata)}
+        known_metadata = rpm.Metadata(
+            **{key: value for key, value in raw_data.items() if key in metadata_keys}
+        )
 
-        return cls(**known_data)
+        return cls(id=raw_data["id"], metadata=known_metadata, scl=scl)
 
     @classmethod
     def from_metadata(
-        cls, service: "Service", original: rpm.Metadata
+        cls,
+        service: "Service",
+        original: rpm.Metadata,
+        scl: Optional[rpm.SoftwareCollection] = None,
     ) -> "BuiltPackage":
         """'Downcast' a Metadata instance by downloading missing data.
 
@@ -78,16 +91,30 @@ class BuiltPackage(rpm.Metadata):
             service: The service to use for fetching missing data.
             original: The original rpm.Metadata to get additional
                 data for.
+            scl: The SoftwareCollection of the package with the original metadata.
 
         Returns:
             New BuiltPackage instance for the original metadata.
         """
 
-        if isinstance(original, cls):  # already downcasted
-            return original
-
         raw_data = service.session.getBuild(attr.asdict(original))
-        return cls.from_mapping(raw_data)
+        return cls.from_mapping(raw_data, scl=scl)
+
+    @classmethod
+    def from_package(
+        cls, service: "Service", original: rpm.PackageLike
+    ) -> "BuiltPackage":
+        """Convert other PackageLike by identifying and querying it's build.
+
+        Keyword arguments:
+            service: The service that will be searched for the build data.
+            original: The PackageLike that should be looked up.
+
+        Returns:
+            New BuiltPackage instance related to the original package.
+        """
+
+        return cls.from_metadata(service, original.metadata, original.scl)
 
 
 @service.register("koji", initializer="from_config_profile")
@@ -173,17 +200,22 @@ class Service(abc.Repository, abc.Builder):
             tag_name: Name of the tag to query.
 
         Yields:
-            Metadata for the latest builds in the specified tag.
+            BuiltPackage for each latest builds in the specified tag.
         """
 
-        build_list = self.session.listTagged(tag_name)
-        build_iter = map(BuiltPackage.from_mapping, build_list)
-        build_groups = groupby(sorted(build_iter), key=attrgetter("name"))
-        latest_iter = starmap(lambda _name, group: max(group), build_groups)
+        by_name = attrgetter("metadata.name")
+        by_metadata = attrgetter("metadata")
 
-        yield from latest_iter
+        all_tagged = map(BuiltPackage.from_mapping, self.session.listTagged(tag_name))
+        grouped_by_name = groupby(sorted(all_tagged, key=by_name), key=by_name)
+        groups = (group for _name, group in grouped_by_name)
+        latest = (max(group, key=by_metadata) for group in groups)
 
-    def tag_entry_time(self, tag_name: str, build: rpm.Metadata) -> Optional[datetime]:
+        yield from latest
+
+    def tag_entry_time(
+        self, tag_name: str, build: rpm.PackageLike
+    ) -> Optional[datetime]:
         """Determine the entry time of a build into a tag.
 
         Keyword arguments:
@@ -195,8 +227,8 @@ class Service(abc.Repository, abc.Builder):
             If the build is not present within the tag, returns None.
         """
 
-        # Ensure the build has an ID
-        build = BuiltPackage.from_metadata(self, build)
+        if not isinstance(build, BuiltPackage):
+            build = BuiltPackage.from_package(self, build)
 
         # Fetch tag history for this build, and extract latest entry time
         history = self.session.tagHistory(tag=tag_name, build=build.id)
@@ -211,7 +243,7 @@ class Service(abc.Repository, abc.Builder):
 
     def download(
         self,
-        package: rpm.Metadata,
+        package: rpm.PackageLike,
         target_dir: Path,
         *,
         session: Optional[requests.Session] = None,
@@ -239,17 +271,19 @@ class Service(abc.Repository, abc.Builder):
         if isinstance(package, BuiltPackage):
             build = package
         else:
-            build = BuiltPackage.from_metadata(self, package)
+            build = BuiltPackage.from_package(self, package)
 
-        rpm_list = self.session.listRPMs(buildID=build.id, arches=build.arch)
+        rpm_list = self.session.listRPMs(buildID=build.id, arches=build.metadata.arch)
         # Get only the package exactly matching the metadata
         candidate_list = map(BuiltPackage.from_mapping, rpm_list)
 
-        target_pkg, = (c for c in candidate_list if c.nevra == build.nevra)
+        target_pkg, = (
+            c for c in candidate_list if c.metadata.nevra == build.metadata.nevra
+        )
         target_url = "/".join(
             [
-                self.path_info.build(attr.asdict(build)),
-                self.path_info.rpm(attr.asdict(target_pkg)),
+                self.path_info.build(attr.asdict(build.metadata)),
+                self.path_info.rpm(attr.asdict(target_pkg.metadata)),
             ]
         )
 
@@ -262,15 +296,11 @@ class Service(abc.Repository, abc.Builder):
             for chunk in response.iter_content(chunk_size=256):
                 ostream.write(chunk)
 
-        return rpm.LocalPackage(target_file_path)
+        return rpm.LocalPackage(target_file_path, scl=package.scl)
 
     def tag_build(
-        self,
-        tag_name: str,
-        build_metadata: rpm.Metadata,
-        *,
-        owner: Optional[str] = None,
-    ) -> rpm.Metadata:
+        self, tag_name: str, build: BuiltPackage, *, owner: Optional[str] = None
+    ) -> BuiltPackage:
         """Add an existing build to a new tag.
 
         Keyword arguments:
@@ -291,17 +321,17 @@ class Service(abc.Repository, abc.Builder):
         # Ensure that the package is in the package list
         self.session.packageListAdd(
             tag_name,
-            build_metadata.name,
+            build.metadata.name,
             owner=owner if owner is not None else self.default_owner,
         )
 
         # Create the task
-        task_id = self.session.tagBuild(tag_name, build_metadata.nvr)
+        task_id = self.session.tagBuild(tag_name, build.metadata.nvr)
 
         # Wait for the task to finish
         self.__watch_task(task_id, silent=True, poll_interval=3)
 
-        return build_metadata
+        return build
 
     def __query_target(self, target_name: str) -> dict:
         """Queries the service for information on a target.
@@ -475,11 +505,11 @@ class Service(abc.Repository, abc.Builder):
                 self.session.getTaskResult(build_task_id)  # always raise
             except koji.GenericError as original:  # extract the reason
                 reason = original.args[0].partition(":")[0]  # up to first :
-                raise abc.BuildFailure(source_package.metadata, reason) from None
+                raise abc.BuildFailure(source_package, reason) from None
 
         build_params = {
             key: getattr(source_package.metadata, key)
             for key in ("name", "version", "release", "epoch")
         }
         built_metadata = self.session.getBuild(build_params, strict=True)
-        return BuiltPackage.from_mapping(built_metadata)
+        return BuiltPackage.from_mapping(built_metadata, scl=source_package.scl)

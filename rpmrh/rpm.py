@@ -312,7 +312,7 @@ class LocalPackage:
     metadata: Metadata = attr.ib(validator=instance_of(Metadata))
 
     #: SoftwareCollection this package is part of
-    scl: Optional[str] = attr.ib(default=None)
+    scl: Optional[SoftwareCollection] = attr.ib(default=None)
 
     @path.validator
     def _existing_file_path(self, _attribute, path):
