@@ -31,7 +31,7 @@ class Repository(metaclass=ABCMeta):
         """Set of tag prefixes associated with this Repository."""
 
     @abstractmethod
-    def latest_builds(self, tag_name: str) -> Iterator[rpm.Metadata]:
+    def latest_builds(self, tag_name: str) -> Iterator[rpm.PackageLike]:
         """Provide metadata for all latest builds within a tag.
 
         Keyword arguments:
@@ -41,7 +41,9 @@ class Repository(metaclass=ABCMeta):
             Metadata for all latest builds within the tag.
         """
 
-    def tag_entry_time(self, tag_name: str, build: rpm.Metadata) -> Optional[datetime]:
+    def tag_entry_time(
+        self, tag_name: str, build: rpm.PackageLike
+    ) -> Optional[datetime]:
         """Determine the entry time of a build into a tag.
 
         Keyword arguments:
@@ -63,7 +65,7 @@ class Repository(metaclass=ABCMeta):
     @abstractmethod
     def download(
         self,
-        package: rpm.Metadata,
+        package: rpm.PackageLike,
         target_dir: Path,
         *,
         session: Optional[requests.Session] = None
@@ -87,7 +89,7 @@ class BuildFailure(UserError):
     lead = "Build failure"
 
     #: The package that failed to build
-    package = attr.ib(validator=instance_of(rpm.Metadata))
+    package = attr.ib(validator=instance_of(rpm.PackageLike))
     #: The reason why the build failed
     reason = attr.ib(validator=instance_of(str))
 
@@ -118,7 +120,9 @@ class Builder(ContextDecorator, metaclass=ABCMeta):
         """Set of target prefixes associated with this Builder."""
 
     @abstractmethod
-    def build(self, target_name: str, source_package: rpm.LocalPackage) -> rpm.Metadata:
+    def build(
+        self, target_name: str, source_package: rpm.LocalPackage
+    ) -> rpm.PackageLike:
         """Build a source package using this Builder.
 
         Keyword arguments:
