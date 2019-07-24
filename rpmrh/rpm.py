@@ -5,10 +5,10 @@ from functools import partialmethod
 from pathlib import Path
 from typing import Any
 from typing import Callable
-from typing import cast
 from typing import ClassVar
 from typing import Tuple
 from typing import Union
+from typing import cast
 
 import attr
 from attr.validators import instance_of
@@ -54,6 +54,12 @@ def _normalize_path(path: Union[str, Path]) -> Path:
     """Normalize path arguments into canonical absolute paths"""
 
     return Path(path).resolve()
+
+
+def _ensure_text(data: Union[str, bytes], *, encoding: str = "utf-8") -> str:
+    """Decode input data into Unicode string if necessary"""
+
+    return data.decode(encoding) if isinstance(data, bytes) else data
 
 
 @attr.s(slots=True, cmp=False, frozen=True, hash=True)
@@ -246,9 +252,9 @@ class LocalPackage:
 
         # Decode the metadata
         metadata = {
-            "name": header[_rpm.RPMTAG_NAME].decode("utf-8"),
-            "version": header[_rpm.RPMTAG_VERSION].decode("utf-8"),
-            "release": header[_rpm.RPMTAG_RELEASE].decode("utf-8"),
+            "name": _ensure_text(header[_rpm.RPMTAG_NAME]),
+            "version": _ensure_text(header[_rpm.RPMTAG_VERSION]),
+            "release": _ensure_text(header[_rpm.RPMTAG_RELEASE]),
             "epoch": header[_rpm.RPMTAG_EPOCHNUM],
         }
 
@@ -257,7 +263,7 @@ class LocalPackage:
         if header[_rpm.RPMTAG_SOURCEPACKAGE]:
             metadata["arch"] = "src"
         else:
-            metadata["arch"] = header[_rpm.RPMTAG_ARCH].decode("utf-8")
+            metadata["arch"] = _ensure_text(header[_rpm.RPMTAG_ARCH])
 
         return Metadata(**metadata)
 
