@@ -47,7 +47,7 @@ class Package:
     scl = attr.ib(validator=instance_of(SCL))
 
     #: RPM metadata of the package
-    metadata = attr.ib(validator=optional(instance_of(rpm.Metadata)), default=None)
+    metadata = attr.ib(default=None)
 
     # TODO: Get rid of the following attributes;
     # they are properties of COMMAND, not package
