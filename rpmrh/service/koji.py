@@ -150,7 +150,7 @@ class Service(abc.Repository, abc.Builder):
 
         credentials = {
             kind: os.path.expanduser(self.configuration[kind])
-            for kind in ("cert", "ca", "serverca")
+            for kind in ("cert", "serverca")
         }
 
         self.session.ssl_login(**credentials)
