@@ -1,14 +1,9 @@
 """Command Line Interface for the package"""
 import logging
-from collections import defaultdict
-from collections import OrderedDict
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from functools import lru_cache
-from functools import reduce
-from itertools import chain
-from itertools import product
+from collections import OrderedDict, defaultdict
+from datetime import datetime, timedelta, timezone
+from functools import lru_cache, reduce
+from itertools import chain, product
 from operator import attrgetter
 from pathlib import Path
 from typing import Iterator
@@ -17,20 +12,12 @@ import attr
 import click
 from ruamel import yaml
 
-from .. import configuration
-from .. import RESOURCE_ID
-from .. import rpm
-from .. import util
+from .. import RESOURCE_ID, configuration, rpm, util
 from ..configuration._loading import load_matching_configuration
 from ..exception import UserError
 from ..service.abc import BuildFailure
 from ..service.jenkins import UnknownJob
-from .tooling import Package
-from .tooling import PackageStream
-from .tooling import SCL
-from .tooling import stream_generator
-from .tooling import stream_processor
-
+from .tooling import SCL, Package, PackageStream, stream_generator, stream_processor
 
 # Logging setup
 logger = logging.getLogger(RESOURCE_ID)
@@ -137,7 +124,7 @@ def main(context, source, destination, **_options):
         log.debug("destination:", destination)
 
 
-@main.resultcallback()
+@main.result_callback()
 @click.pass_context
 def run_chain(
     context,
