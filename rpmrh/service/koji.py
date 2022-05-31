@@ -199,7 +199,7 @@ class Service(abc.Repository, abc.Builder):
         build = BuiltPackage.from_metadata(self, build)
 
         # Fetch tag history for this build, and extract latest entry time
-        history = self.session.queryHistory(["tag_listing"], tag=tag_name, build=build.id)["tag_listing"]
+        history = self.session.queryHistory(["tag_listing"], tag=tag_name, build=build.id)
         timestamp = max(map(itemgetter("create_ts"), history), default=None)
 
         if timestamp is None:
